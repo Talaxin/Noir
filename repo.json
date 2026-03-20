@@ -4,7 +4,7 @@
   "subtitle": "Noir app repository",
   "description": "Noir app repository for eSign/AltStore-style clients.",
   "website": "https://github.com/Talaxin/Noir",
-  "iconURL": "https://www.miruro.to/favicon.ico",
+  "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
   "tintColor": "#1a1a1a",
   "featuredApps": [
     "com.maxtori.noir"
@@ -20,7 +20,7 @@
       "versionDate": "2026-03-19T00:00:00-04:00",
       "versionDescription": "Updated modules and subtitles handling.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-      "iconURL": "https://www.miruro.to/favicon.ico",
+      "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
@@ -29,7 +29,7 @@
           "date": "2026-03-19T00:00:00-04:00",
           "localizedDescription": "Updated modules and subtitles handling.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 20757983,
+          "size": 24438645,
           "minOSVersion": "15.0"
         }
       ]
