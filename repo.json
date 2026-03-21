@@ -16,7 +16,7 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "versionDate": "2026-03-19T00:00:00-04:00",
       "versionDescription": "Updated modules and subtitles handling.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
@@ -25,11 +25,11 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.6",
+          "version": "1.0.7",
           "date": "2026-03-19T00:00:00-04:00",
           "localizedDescription": "Updated modules and subtitles handling.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24452137,
+          "size": 24454143,
           "minOSVersion": "15.0"
         }
       ]
