@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.9",
-      "versionDate": "2026-03-20T22:39:32-07:00",
-      "versionDescription": "App and metadata aligned to 1.0.9 for eSign consistency.",
+      "version": "1.0.10",
+      "versionDate": "2026-03-20T23:36:54-07:00",
+      "versionDescription": "Proxy playlist filtering fix to prevent stalls from non-media URIs.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.9",
-          "date": "2026-03-20T22:39:32-07:00",
-          "localizedDescription": "App and metadata aligned to 1.0.9 for eSign consistency.",
+          "version": "1.0.10",
+          "date": "2026-03-20T23:36:54-07:00",
+          "localizedDescription": "Proxy playlist filtering fix to prevent stalls from non-media URIs.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24454133,
+          "size": 24453931,
           "minOSVersion": "15.0"
         }
       ]
