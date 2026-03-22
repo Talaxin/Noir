@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.11",
-      "versionDate": "2026-03-21T13:07:30-07:00",
-      "versionDescription": "Preserve HLS segment order exactly to prevent jumpy playback.",
+      "version": "1.0.12",
+      "versionDate": "2026-03-21T21:36:15-07:00",
+      "versionDescription": "Miruro stall auto-failover and subtitle master fetch retry fixes.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.11",
-          "date": "2026-03-21T13:07:30-07:00",
-          "localizedDescription": "Preserve HLS segment order exactly to prevent jumpy playback.",
+          "version": "1.0.12",
+          "date": "2026-03-21T21:36:15-07:00",
+          "localizedDescription": "Miruro stall auto-failover and subtitle master fetch retry fixes.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24453897,
+          "size": 24459004,
           "minOSVersion": "15.0"
         }
       ]
