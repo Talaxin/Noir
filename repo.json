@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.20",
-      "versionDate": "2026-03-22T11:42:00-07:00",
-      "versionDescription": "Fix sustained Miruro segment handling under continuous playback by filtering definite non-media injected URIs (e.g., .webp) while preserving valid obfuscated media segment URIs (e.g., .gif), verified with a 2-minute continuous segment watch.",
+      "version": "1.0.21",
+      "versionDate": "2026-03-22T15:06:15-07:00",
+      "versionDescription": "Validated Miruro streaming stability with repeated runs and sustained 2-minute segment watch; release includes TS-only segment proxy path and robust non-media URI filtering during playlist rewrite.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.20",
-          "date": "2026-03-22T11:42:00-07:00",
-          "localizedDescription": "Fix sustained Miruro segment handling under continuous playback by filtering definite non-media injected URIs (e.g., .webp) while preserving valid obfuscated media segment URIs (e.g., .gif), verified with a 2-minute continuous segment watch.",
+          "version": "1.0.21",
+          "date": "2026-03-22T15:06:15-07:00",
+          "localizedDescription": "Validated Miruro streaming stability with repeated runs and sustained 2-minute segment watch; release includes TS-only segment proxy path and robust non-media URI filtering during playlist rewrite.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24458535,
+          "size": 24457479,
           "minOSVersion": "15.0"
         }
       ]
