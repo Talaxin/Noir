@@ -5,7 +5,7 @@
     "name": "Noir",
     "icon": "https://www.miruro.to/favicon.ico"
   },
-  "version": "1.0.18",
+  "version": "1.0.19",
   "language": "English",
   "streamType": "HLS",
   "quality": "1080p",
