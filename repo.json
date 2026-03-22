@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.17",
-      "versionDate": "2026-03-22T11:05:09-07:00",
-      "versionDescription": "Fix Miruro in-app playback stalls by correcting proxy readiness probing and hardening stream proxy listener startup with real port-ready validation/retry to avoid address-in-use races.",
+      "version": "1.0.18",
+      "versionDate": "2026-03-22T11:16:56-07:00",
+      "versionDescription": "Fix Miruro playback regression by disabling aggressive waiting-state auto-fallback that caused endless server cycling before AVPlayer could start buffering.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.17",
-          "date": "2026-03-22T11:05:09-07:00",
-          "localizedDescription": "Fix Miruro in-app playback stalls by correcting proxy readiness probing and hardening stream proxy listener startup with real port-ready validation/retry to avoid address-in-use races.",
+          "version": "1.0.18",
+          "date": "2026-03-22T11:16:56-07:00",
+          "localizedDescription": "Fix Miruro playback regression by disabling aggressive waiting-state auto-fallback that caused endless server cycling before AVPlayer could start buffering.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24457583,
+          "size": 24458561,
           "minOSVersion": "15.0"
         }
       ]
