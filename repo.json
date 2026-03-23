@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.25",
-      "versionDate": "2026-03-23T00:35:58-07:00",
-      "versionDescription": "Fix AnimeKai (Consumet) playback freeze after intro by tightening HLS proxy segment filtering.",
+      "version": "1.0.26",
+      "versionDate": "2026-03-23T10:32:39-07:00",
+      "versionDescription": "Fix invalid resume seeks causing AnimeKai playback to freeze around the first seconds.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.25",
-          "date": "2026-03-23T00:35:58-07:00",
-          "localizedDescription": "Fix AnimeKai (Consumet) playback freeze after intro by tightening HLS proxy segment filtering.",
+          "version": "1.0.26",
+          "date": "2026-03-23T10:32:39-07:00",
+          "localizedDescription": "Fix invalid resume seeks causing AnimeKai playback to freeze around the first seconds.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24456714,
+          "size": 24455785,
           "minOSVersion": "15.0"
         }
       ]
