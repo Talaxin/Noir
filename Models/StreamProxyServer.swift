@@ -602,6 +602,14 @@ final class StreamProxyServer {
             if t.contains(".m3u8") || t.contains(".ts") || t.contains(".m4s") || t.contains(".mp4") {
                 return true
             }
+            // Some providers emit extension-less segment paths (opaque tokens) between tags.
+            // Accept path-like, whitespace-free lines as URI candidates and rely on extension
+            // denylist below to filter obvious non-media assets.
+            if t.contains(" ") || t.contains("\t") { return false }
+            if t.hasPrefix("{") || t.hasPrefix("[") { return false }
+            if t.hasPrefix("data:") { return false }
+            if t.hasPrefix("/") || t.hasPrefix("./") || t.hasPrefix("../") { return true }
+            if t.count >= 6 && t.count <= 2048 { return true }
             return false
         }
 

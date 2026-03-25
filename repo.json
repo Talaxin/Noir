@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.27",
-      "versionDate": "2026-03-23T10:49:14-07:00",
-      "versionDescription": "Fix release version mismatch: IPA bundle version now matches repo metadata and includes resume-seek freeze fixes.",
+      "version": "1.0.28",
+      "versionDate": "2026-03-24T23:28:02-07:00",
+      "versionDescription": "Fix AnimeKai black-screen regression by restoring proxy support for extension-less HLS segment URIs while still filtering non-media assets.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.27",
-          "date": "2026-03-23T10:49:14-07:00",
-          "localizedDescription": "Fix release version mismatch: IPA bundle version now matches repo metadata and includes resume-seek freeze fixes.",
+          "version": "1.0.28",
+          "date": "2026-03-24T23:28:02-07:00",
+          "localizedDescription": "Fix AnimeKai black-screen regression by restoring proxy support for extension-less HLS segment URIs while still filtering non-media assets.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24456597,
+          "size": 24456552,
           "minOSVersion": "15.0"
         }
       ]
