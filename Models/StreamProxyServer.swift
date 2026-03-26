@@ -563,6 +563,10 @@ final class StreamProxyServer {
         var out: [String] = []
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.~"))
         let definitelyNonMediaSegmentExts: Set<String> = [
+            // NOTE: Some providers disguise media segments behind non-video extensions.
+            // We only use this set to drop *out-of-context* URI lines (i.e. when we are
+            // not expecting a segment/playlist URI). If a line is the URI immediately
+            // following `#EXTINF`, we must proxy it even if the extension looks wrong.
             "webp", "png", "jpg", "jpeg", "svg",
             "css", "js", "json", "xml", "html", "txt",
             "woff", "woff2", "ttf", "otf", "eot", "ico",
@@ -669,11 +673,12 @@ final class StreamProxyServer {
                 continue
             }
 
-            if let segURL = URL(string: segmentURL), definitelyNonMediaSegmentExts.contains(segURL.pathExtension.lowercased()) {
-                // Provider occasionally injects asset-like lines into media playlists; drop with paired EXTINF.
-                if let last = out.last, last.hasPrefix("#EXTINF:") {
-                    _ = out.popLast()
-                }
+            if !expectsURI,
+               let segURL = URL(string: segmentURL),
+               definitelyNonMediaSegmentExts.contains(segURL.pathExtension.lowercased())
+            {
+                // Provider occasionally injects asset-like lines into playlists; drop these only when
+                // they appear out-of-context (i.e. not as the expected URI following #EXTINF / stream tags).
                 skippedUnexpectedURI += 1
                 expectsURI = false
                 continue
