@@ -564,7 +564,7 @@ final class StreamProxyServer {
         URLSession.shared.dataTask(with: request, completionHandler: finish).resume()
     }
 
-    /// Some CDNs label MPEG-TS or fMP4 as `image/gif` / `image/png` to confuse scrapers. AVPlayer trusts `Content-Type` and will not decode video if wrong ([Apple HLS MIME guidance](https://developer.apple.com/documentation/http-live-streaming/deploying-a-basic-http-live-streaming-hls-stream)).
+    /// Some CDNs label MPEG-TS or fMP4 as image/* (e.g. image/gif) while the body is video. AVPlayer uses Content-Type; wrong MIME prevents decoding.
     private func sniffProxiedSegmentContentType(data: Data, upstreamContentType: String) -> String {
         let upstreamLower = upstreamContentType.lowercased()
         guard !data.isEmpty else {
