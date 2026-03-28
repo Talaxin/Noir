@@ -467,10 +467,12 @@ final class StreamProxyServer {
         }
         let targetURL: String?
         var requestedSubtitleDelay: Double = 0
+        var isSegmentRequest = false
         if path == "/s" || path == "/s/" || path.hasPrefix("/s/") {
             Logger.shared.log("Proxy forwarding stream playlist: \(path)", type: "Stream")
             targetURL = streamURL
         } else if (path == "/proxy" || path == "/segment.ts"), let raw = query["url"] {
+            isSegmentRequest = (path == "/segment.ts")
             let u = raw.removingPercentEncoding ?? raw
             if let delayRaw = query["delay"], let d = Double(delayRaw) {
                 requestedSubtitleDelay = d
@@ -548,11 +550,47 @@ final class StreamProxyServer {
             } else {
                 let normalized = self.normalizeSubtitleForAVPlayerIfNeeded(data: body, targetURL: urlString, contentType: contentType)
                 let shifted = self.shiftSubtitleTimingIfNeeded(data: normalized, delaySeconds: requestedSubtitleDelay)
-                let replyType = isSubtitleLike ? "text/vtt" : (contentType.isEmpty ? nil : contentType)
+                let replyType: String?
+                if isSubtitleLike {
+                    replyType = "text/vtt"
+                } else if isSegmentRequest {
+                    replyType = self.sniffProxiedSegmentContentType(data: shifted, upstreamContentType: contentType)
+                } else {
+                    replyType = contentType.isEmpty ? nil : contentType
+                }
                 completion(200, replyType, shifted)
             }
         }
         URLSession.shared.dataTask(with: request, completionHandler: finish).resume()
+    }
+
+    /// Some CDNs label MPEG-TS or fMP4 as `image/gif` / `image/png` to confuse scrapers. AVPlayer trusts `Content-Type` and will not decode video if wrong ([Apple HLS MIME guidance](https://developer.apple.com/documentation/http-live-streaming/deploying-a-basic-http-live-streaming-hls-stream)).
+    private func sniffProxiedSegmentContentType(data: Data, upstreamContentType: String) -> String {
+        let upstreamLower = upstreamContentType.lowercased()
+        guard !data.isEmpty else {
+            return upstreamContentType.isEmpty ? "application/octet-stream" : upstreamContentType
+        }
+        let first = data[data.startIndex]
+        if first == 0x47 {
+            if upstreamLower.hasPrefix("image/") || upstreamLower.isEmpty {
+                Logger.shared.log("Proxy MIME override: upstream=\(upstreamContentType.isEmpty ? "(none)" : upstreamContentType) -> video/MP2T (MPEG-TS sync 0x47)", type: "Stream")
+            }
+            return "video/MP2T"
+        }
+        if data.count >= 8 {
+            let four = data.subdata(in: data.index(data.startIndex, offsetBy: 4)..<data.index(data.startIndex, offsetBy: 8))
+            if four == Data([0x66, 0x74, 0x79, 0x70]) || four == Data([0x73, 0x74, 0x79, 0x70]) {
+                if upstreamLower.hasPrefix("image/") || upstreamLower.isEmpty {
+                    Logger.shared.log("Proxy MIME override: upstream=\(upstreamContentType.isEmpty ? "(none)" : upstreamContentType) -> video/mp4 (ftyp/styp)", type: "Stream")
+                }
+                return "video/mp4"
+            }
+        }
+        if upstreamLower.hasPrefix("image/") {
+            Logger.shared.log("Proxy MIME: segment upstream=\(upstreamContentType) not TS/fMP4 at start; using application/octet-stream", type: "Stream")
+            return "application/octet-stream"
+        }
+        return upstreamContentType.isEmpty ? "application/octet-stream" : upstreamContentType
     }
     
     /// Rewrite m3u8 so segment URLs go through this proxy with headers, and strip #EXTINF titles so Infuse doesn't show wrong metadata (e.g. "State of Fear") after playback.
