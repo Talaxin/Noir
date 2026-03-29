@@ -189,6 +189,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
         readyObservation = nil
         miruroStallFallbackWorkItem?.cancel()
         miruroStallFallbackWorkItem = nil
+        StreamProxyServer.shared.stop()
 
 #if os(iOS)
         if let token = subtitleTimeObserverToken {

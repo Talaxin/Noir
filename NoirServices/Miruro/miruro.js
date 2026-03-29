@@ -17,6 +17,16 @@ function safeText(res) {
   return res.text().then(function (t) { return t != null ? String(t) : ""; }).catch(function () { return ""; });
 }
 
+/** RFC-like Origin: scheme + host (+ port). Some CDNs reject Origin when it includes a path. */
+function originFromReferer(ref) {
+  if (!ref || typeof ref !== "string") return BASE.replace(/\/$/, "");
+  try {
+    return new URL(ref).origin;
+  } catch (e) {
+    return String(ref).replace(/\/$/, "");
+  }
+}
+
 /**
  * Call the secure pipe API.
  * @param {string} path - e.g. "config", "sources", "search", "anime", "episodes"
@@ -185,7 +195,7 @@ async function extractStreamUrl(episodeIdOrUrl, preferredCategory) {
             streams.push({
               title: label,
               streamUrl: file,
-              headers: { "Referer": ref, "Origin": ref.replace(/\/$/, ""), "User-Agent": HEADERS["User-Agent"] },
+              headers: { "Referer": ref, "Origin": originFromReferer(ref), "User-Agent": HEADERS["User-Agent"] },
               _type: type,
               _audio: streamCategories[c]
             });

@@ -1425,10 +1425,8 @@ struct ModulesSearchResultsSheet: View {
                         StreamProxyServer.shared.stop()
                         if holder.value != .invalid { UIApplication.shared.endBackgroundTask(holder.value) }
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 180) {
-                        StreamProxyServer.shared.stop()
-                        if holder.value != .invalid { UIApplication.shared.endBackgroundTask(holder.value) }
-                    }
+                    // Do not stop the proxy on a short timer — Infuse/VLC may read the HLS for the full duration.
+                    // iOS will end the background task when the system budget expires; until then keep the listener up.
                     // Delay opening Infuse so the proxy listener is ready to accept connections
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         if let scheme = external.schemeURL(for: uniqueURL), UIApplication.shared.canOpenURL(scheme) {
@@ -1497,10 +1495,6 @@ struct ModulesSearchResultsSheet: View {
 
                         urlToPlay = proxyURL
                         Logger.shared.log("Proxying stream for in-app player so segments get headers", type: "Stream")
-
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 300) {
-                            StreamProxyServer.shared.stop()
-                        }
                     }
                 }
                 
