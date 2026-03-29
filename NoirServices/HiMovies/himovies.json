@@ -1,0 +1,19 @@
+{
+  "sourceName": "HiMovies (Consumet)",
+  "iconUrl": "https://docs.consumet.org/favicon.ico",
+  "author": {
+    "name": "Consumet",
+    "icon": "https://docs.consumet.org/favicon.ico"
+  },
+  "version": "1.0.1",
+  "language": "English",
+  "streamType": "HLS",
+  "quality": "Various",
+  "baseUrl": "https://mac2.tail58f58f.ts.net/consumet",
+  "searchBaseUrl": "https://mac2.tail58f58f.ts.net/consumet/movies/himovies",
+  "scriptUrl": "https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/HiMovies/himovies.js",
+  "type": "movie",
+  "asyncJS": true,
+  "softsub": true,
+  "downloadSupport": true
+}

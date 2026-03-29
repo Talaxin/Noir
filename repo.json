@@ -16,20 +16,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.31",
-      "versionDate": "2026-03-28T19:04:01-07:00",
-      "versionDescription": "Fix Miruro and headered HLS: keep stream proxy alive for full in-app playback (stop when player closes); remove premature proxy shutdown timers. Miruro module: send proper Origin (scheme+host only) for CDN requests.",
+      "version": "1.0.32",
+      "versionDate": "2026-03-28T23:12:44-07:00",
+      "versionDescription": "Add HiMovies (Consumet) service module; include HiMovies in release bumps. App 1.0.32.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.31",
-          "date": "2026-03-28T19:04:01-07:00",
-          "localizedDescription": "Fix Miruro and headered HLS: keep stream proxy alive for full in-app playback (stop when player closes); remove premature proxy shutdown timers. Miruro module: send proper Origin (scheme+host only) for CDN requests.",
+          "version": "1.0.32",
+          "date": "2026-03-28T23:12:44-07:00",
+          "localizedDescription": "Add HiMovies (Consumet) service module; include HiMovies in release bumps. App 1.0.32.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24456082,
+          "size": 24456702,
           "minOSVersion": "15.0"
         }
       ]

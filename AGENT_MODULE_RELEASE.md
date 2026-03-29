@@ -25,6 +25,8 @@ Use this exact runbook when releasing Noir from:
   - `NoirServices/AnimeKai/animekai.js`
   - `NoirServices/TokyoInsider/tokyoinsider.json`
   - `NoirServices/TokyoInsider/tokyoinsider.js`
+  - `NoirServices/HiMovies/himovies.json`
+  - `NoirServices/HiMovies/himovies.js`
 
 ## Preflight Checks
 1. Confirm location:
@@ -64,6 +66,7 @@ What this updates:
   - `NoirServices/Miruro/miruro.json`
   - `NoirServices/AnimeKai/animekai.json`
   - `NoirServices/TokyoInsider/tokyoinsider.json`
+  - `NoirServices/HiMovies/himovies.json`
 
 ## Validate Before Push
 1. Build check:
@@ -90,6 +93,7 @@ What this updates:
   - `https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/Miruro/miruro.json`
   - `https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/AnimeKai/animekai.json`
   - `https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/TokyoInsider/tokyoinsider.json`
+  - `https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/HiMovies/himovies.json`
 
 ## Agent Hand-off Notes
 - If release metadata and IPA version ever mismatch, rebuild IPA and rerun `release_esign.py --bump`.

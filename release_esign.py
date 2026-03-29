@@ -22,6 +22,7 @@ DEFAULT_MODULES = [
     "NoirServices/Miruro/miruro.json",
     "NoirServices/AnimeKai/animekai.json",
     "NoirServices/TokyoInsider/tokyoinsider.json",
+    "NoirServices/HiMovies/himovies.json",
 ]
 
 
