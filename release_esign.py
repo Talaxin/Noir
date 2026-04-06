@@ -9,6 +9,7 @@ Usage examples:
   python3 release_esign.py --description "Subtitle stability fixes."
   python3 release_esign.py --bump --description "New app build."
   python3 release_esign.py --bump --modules NoirServices/Foo/foo.json --description "Only foo module changed."
+  python3 release_esign.py --ipa build/Whatever.ipa --bundle-id com.maxtori.whatever --bump --description "Whatever app build."
 
 New module manifests should ship at version 1.0.0; omit them from --modules
 when using --bump until that module’s script/manifest is part of a release that
@@ -89,6 +90,15 @@ def main() -> int:
         help="Path to IPA file (default: build/Noir.ipa)",
     )
     parser.add_argument(
+        "--bundle-id",
+        default="com.maxtori.noir",
+        metavar="ID",
+        help=(
+            "Which app in repo.json apps[] to update (must match bundleIdentifier). "
+            "Default: com.maxtori.noir"
+        ),
+    )
+    parser.add_argument(
         "--description",
         default="Latest Noir app update.",
         help="Release notes text written into repo.json description fields.",
@@ -129,7 +139,15 @@ def main() -> int:
     apps = repo.get("apps", [])
     if not apps:
         raise ValueError("repo.json has no apps[] entries")
-    app = apps[0]
+    app = next(
+        (a for a in apps if a.get("bundleIdentifier") == args.bundle_id),
+        None,
+    )
+    if app is None:
+        known = [a.get("bundleIdentifier") for a in apps]
+        raise ValueError(
+            f"No app with bundleIdentifier {args.bundle_id!r}. Known: {known}"
+        )
     versions = app.get("versions", [])
     if not versions:
         raise ValueError("repo.json apps[0] has no versions[] entries")

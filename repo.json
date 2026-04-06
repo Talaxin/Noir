@@ -7,7 +7,8 @@
   "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
   "tintColor": "#1a1a1a",
   "featuredApps": [
-    "com.maxtori.noir"
+    "com.maxtori.noir",
+    "com.maxtori.whatever"
   ],
   "apps": [
     {
@@ -30,6 +31,30 @@
           "localizedDescription": "Fix Miruro and headered HLS: keep stream proxy alive for full in-app playback (stop when player closes); remove premature proxy shutdown timers. Miruro module: send proper Origin (scheme+host only) for CDN requests.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
           "size": 24456082,
+          "minOSVersion": "15.0"
+        }
+      ]
+    },
+    {
+      "name": "Whatever",
+      "bundleIdentifier": "com.maxtori.whatever",
+      "developerName": "Talaxin",
+      "subtitle": "Placeholder second app (eSign repo test)",
+      "localizedDescription": "Placeholder app entry to test a multi-app eSign source. Replace build/Whatever.ipa with a real build when ready.",
+      "version": "1.0.0",
+      "versionDate": "2026-04-06T12:00:00-07:00",
+      "versionDescription": "Initial placeholder for two-app source testing.",
+      "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Whatever.ipa",
+      "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
+      "tintColor": "#4a5568",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-04-06T12:00:00-07:00",
+          "localizedDescription": "Initial placeholder for two-app source testing.",
+          "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Whatever.ipa",
+          "size": 1024,
           "minOSVersion": "15.0"
         }
       ]
