@@ -45,7 +45,7 @@
       "versionDate": "2026-04-06T12:00:00-07:00",
       "versionDescription": "Initial placeholder for two-app source testing.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Whatever.ipa",
-      "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
+      "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/whatever.png",
       "tintColor": "#4a5568",
       "category": "utilities",
       "versions": [
