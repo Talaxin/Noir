@@ -17,20 +17,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.34",
-      "versionDate": "2026-07-05T22:47:15-07:00",
-      "versionDescription": "Fix Checkmate MP4 playback: play VidLink streams directly with Referer, wrap progressive files in HLS proxy when needed.",
+      "version": "1.0.35",
+      "versionDate": "2026-07-06T10:25:08-07:00",
+      "versionDescription": "Fix Checkmate video: prefer H.264 HLS over HEVC MP4, auto-use MPV for HEVC progressive streams.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.34",
-          "date": "2026-07-05T22:47:15-07:00",
-          "localizedDescription": "Fix Checkmate MP4 playback: play VidLink streams directly with Referer, wrap progressive files in HLS proxy when needed.",
+          "version": "1.0.35",
+          "date": "2026-07-06T10:25:08-07:00",
+          "localizedDescription": "Fix Checkmate video: prefer H.264 HLS over HEVC MP4, auto-use MPV for HEVC progressive streams.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24467144,
+          "size": 24464857,
           "minOSVersion": "15.0"
         }
       ]

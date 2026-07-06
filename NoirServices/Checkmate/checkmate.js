@@ -29,6 +29,12 @@ const SOURCE_PRIORITY = {
     "Epsilon": 1
 };
 
+const VIDFAST_HEADERS = {
+    "Referer": "https://vidfast.pro/",
+    "Origin": "https://vidfast.pro",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+};
+
 function parseMediaPath(id) {
     var s = String(id || "");
     var movieMatch = s.match(/movie\/([^/?#]+)/);
@@ -434,10 +440,11 @@ async function extractStreamUrl(ID) {
                         const qualityMatch = String(label).match(/(4K|2160p|1080p|720p|480p|360p)/i);
                         if (qualityMatch) quality = qualityMatch[0].toLowerCase();
                         const title = mappedName + " " + quality.toUpperCase() + " 🇺🇸";
+                        var hdrs = data.referer ? { Referer: data.referer } : (sourceName === "VidFast" ? VIDFAST_HEADERS : {});
                         allStreams.push({
                             title: title,
                             streamUrl: url,
-                            headers: data.referer ? { Referer: data.referer } : {},
+                            headers: hdrs,
                             sourceMapped: mappedName
                         });
                     }
@@ -501,11 +508,25 @@ async function extractStreamUrl(ID) {
             return 0;
         };
 
+        // AVPlayer handles HLS (H.264) well; VidLink MP4s are often HEVC and show audio-only in Normal player.
+        const getFormatWeight = (streamUrl) => {
+            const u = String(streamUrl || "").toLowerCase();
+            if (u.includes(".m3u8")) return 3000;
+            if (u.includes("/h264/") || u.includes("/avc/") || u.includes("avc1")) return 1000;
+            if (u.includes("/h265/") || u.includes("hevc") || u.includes("hvc1")) return -2000;
+            return 0;
+        };
+
         allStreams.sort((a, b) => {
             const qualA = getQualityWeight(a.title);
             const qualB = getQualityWeight(b.title);
             if (qualA !== qualB) {
                 return qualB - qualA;
+            }
+            const fmtA = getFormatWeight(a.streamUrl);
+            const fmtB = getFormatWeight(b.streamUrl);
+            if (fmtA !== fmtB) {
+                return fmtB - fmtA;
             }
             const prioA = SOURCE_PRIORITY[a.sourceMapped] || 0;
             const prioB = SOURCE_PRIORITY[b.sourceMapped] || 0;

@@ -1312,6 +1312,13 @@ struct ModulesSearchResultsSheet: View {
         return false
     }
 
+    /// VidLink and similar CDNs often serve HEVC MP4; AVPlayer may play audio only in Normal player.
+    private func isHEVCProgressiveURL(_ url: String) -> Bool {
+        guard !isLikelyHLSStreamURL(url) else { return false }
+        let lower = url.lowercased()
+        return lower.contains("/h265/") || lower.contains("hevc") || lower.contains("hvc1")
+    }
+
     private func defaultRefererBase(for service: Service) -> String? {
         let base = service.metadata.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty, let url = URL(string: base), let scheme = url.scheme?.lowercased(),
@@ -1488,8 +1495,12 @@ struct ModulesSearchResultsSheet: View {
             
             let inAppRaw = UserDefaults.standard.string(forKey: "inAppPlayer") ?? "Normal"
             let inAppPlayer = (inAppRaw == "mpv") ? "mpv" : "Normal"
+            let useMPVPlayer = inAppPlayer == "mpv" || (inAppPlayer == "Normal" && isHEVCProgressiveURL(url))
+            if useMPVPlayer && inAppPlayer != "mpv" {
+                Logger.shared.log("HEVC progressive stream: using MPV player (Normal player is audio-only for this format)", type: "Stream")
+            }
             
-            if inAppPlayer == "mpv" {
+            if useMPVPlayer {
                 let preset = PlayerPreset.presets.first
                 let subURLs: [String] = externalSubtitleTracks.isEmpty ? (subtitle.map { [$0] } ?? []) : externalSubtitleTracks.map(\.url)
                 let subtitleArray: [String]? = subURLs.isEmpty ? nil : subURLs
