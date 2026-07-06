@@ -544,7 +544,12 @@ final class StreamProxyServer {
             }
             let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
             let isM3u8 = urlString.contains(".m3u8") || contentType.contains("mpegurl") || contentType.contains("m3u8")
-            if isM3u8, let rewritten = self.rewriteM3u8(body, baseURL: url), let rewrittenData = rewritten.data(using: .utf8) {
+            let isRootStreamRequest = path == "/s" || path == "/s/" || path.hasPrefix("/s/")
+            if !isM3u8, isRootStreamRequest {
+                let wrapped = self.makeSingleFileHLSPlaylist(sourceURL: urlString)
+                Logger.shared.log("Proxy wrapping progressive stream as HLS for: \(urlString)", type: "Stream")
+                completion(200, "application/vnd.apple.mpegurl", Data(wrapped.utf8))
+            } else if isM3u8, let rewritten = self.rewriteM3u8(body, baseURL: url), let rewrittenData = rewritten.data(using: .utf8) {
                 Logger.shared.log("Proxy rewrote HLS playlist for: \(urlString)", type: "Stream")
                 completion(200, "application/vnd.apple.mpegurl", rewrittenData)
             } else {
@@ -593,6 +598,22 @@ final class StreamProxyServer {
         return upstreamContentType.isEmpty ? "application/octet-stream" : upstreamContentType
     }
     
+    /// Wrap a single progressive file (MP4, etc.) as a one-segment HLS VOD playlist so AVPlayer/Infuse can open `/s/...m3u8` URLs.
+    private func makeSingleFileHLSPlaylist(sourceURL: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.~"))
+        let encoded = sourceURL.addingPercentEncoding(withAllowedCharacters: allowed) ?? sourceURL
+        let title = displayTitle ?? "Noir Stream"
+        return """
+        #EXTM3U
+        #EXT-X-VERSION:3
+        #EXT-X-PLAYLIST-TYPE:VOD
+        #EXT-X-TARGETDURATION:36000
+        #EXTINF:36000.0,\(title)
+        \(proxyBase)/proxy?url=\(encoded)
+        #EXT-X-ENDLIST
+        """
+    }
+
     /// Rewrite m3u8 so segment URLs go through this proxy with headers, and strip #EXTINF titles so Infuse doesn't show wrong metadata (e.g. "State of Fear") after playback.
     private func rewriteM3u8(_ body: Data, baseURL: URL) -> String? {
         guard let raw = String(data: body, encoding: .utf8) else { return nil }

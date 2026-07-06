@@ -1304,6 +1304,14 @@ struct ModulesSearchResultsSheet: View {
         service.metadata.sourceName == "Miruro" || isCheckmateService(service)
     }
 
+    /// HLS playlists need the local proxy; progressive MP4/WebM can play directly with Referer headers.
+    private func isLikelyHLSStreamURL(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        if lower.contains(".m3u8") || lower.contains(".m3u") { return true }
+        if lower.contains(".mpd") { return true }
+        return false
+    }
+
     private func defaultRefererBase(for service: Service) -> String? {
         let base = service.metadata.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !base.isEmpty, let url = URL(string: base), let scheme = url.scheme?.lowercased(),
@@ -1381,17 +1389,20 @@ struct ModulesSearchResultsSheet: View {
     }
     
     private func playStreamURL(_ url: String, service: Service, subtitle: String?, headers: [String: String]?, externalSubtitleTracks: [(title: String, url: String)] = []) {
+        let preservesFallback = isAggregatorWithStreamFallback(service)
         let miruro = service.metadata.sourceName == "Miruro"
-        let savedQueue = miruro ? viewModel.miruroFallbackQueue : []
-        let savedSvc = miruro ? viewModel.miruroFallbackService : nil
+        let savedQueue = preservesFallback ? viewModel.miruroFallbackQueue : []
+        let savedSvc = preservesFallback ? viewModel.miruroFallbackService : nil
         let savedExtSubs = miruro ? viewModel.miruroFallbackExternalSubs : []
         
         viewModel.resetStreamState()
         
-        if miruro {
+        if preservesFallback {
             viewModel.miruroFallbackQueue = savedQueue
             viewModel.miruroFallbackService = savedSvc
-            viewModel.miruroFallbackExternalSubs = savedExtSubs.isEmpty ? externalSubtitleTracks : savedExtSubs
+            if miruro {
+                viewModel.miruroFallbackExternalSubs = savedExtSubs.isEmpty ? externalSubtitleTracks : savedExtSubs
+            }
         }
         
         if downloadIntent {
@@ -1426,12 +1437,15 @@ struct ModulesSearchResultsSheet: View {
             let externalRaw = UserDefaults.standard.string(forKey: "externalPlayer") ?? ExternalPlayer.none.rawValue
             let external = ExternalPlayer(rawValue: externalRaw) ?? .none
             let serviceURL = service.metadata.baseUrl
-            let needsHeaders = !serviceURL.isEmpty || (headers != nil && !(headers?.isEmpty ?? true))
+            let hasCustomHeaders = headers != nil && !(headers?.isEmpty ?? true)
+            let needsHeaders = !serviceURL.isEmpty || hasCustomHeaders
+            let streamIsHLS = isLikelyHLSStreamURL(url)
+            let needsProxyForPlayback = needsHeaders && (streamIsHLS || external != .none)
             
             if external != .none {
                 let urlToOpen: String
                 let (metadataFilename, displayTitle) = Self.infuseMetadataFilename(mediaTitle: mediaTitle, tmdbId: tmdbId, isMovie: isMovie, episode: selectedEpisode)
-                if needsHeaders, let proxyURL = StreamProxyServer.shared.start(streamURL: url, headers: finalHeaders, metadataFilename: metadataFilename, displayTitle: displayTitle) {
+                if needsProxyForPlayback, let proxyURL = StreamProxyServer.shared.start(streamURL: url, headers: finalHeaders, metadataFilename: metadataFilename, displayTitle: displayTitle) {
                     // Cache-bust so each play = new URL; path already has metadata for Infuse (e.g. Show.S01E01.{tmdb-xxx}.m3u8)
                     let uniqueURL = proxyURL + "?t=" + UUID().uuidString
                     urlToOpen = uniqueURL
@@ -1506,7 +1520,8 @@ struct ModulesSearchResultsSheet: View {
                 let wantsNativeSoftSubs = !extSubs.isEmpty
 
                 var proxyBase: String? = nil
-                if needsHeaders || wantsNativeSoftSubs {
+                let shouldProxyInApp = wantsNativeSoftSubs || (needsHeaders && streamIsHLS)
+                if shouldProxyInApp {
                     let (metadataFilename, displayTitle) = Self.infuseMetadataFilename(mediaTitle: mediaTitle, tmdbId: tmdbId, isMovie: isMovie, episode: selectedEpisode)
                     if let proxyURLString = StreamProxyServer.shared.start(streamURL: url, headers: finalHeaders, metadataFilename: metadataFilename, displayTitle: displayTitle),
                        let proxyURL = URL(string: proxyURLString) {
@@ -1515,6 +1530,8 @@ struct ModulesSearchResultsSheet: View {
                         urlToPlay = proxyURL
                         Logger.shared.log("Proxying stream for in-app player so segments get headers", type: "Stream")
                     }
+                } else if hasCustomHeaders {
+                    Logger.shared.log("Playing progressive stream directly with custom headers (no HLS proxy)", type: "Stream")
                 }
                 
                 Task { @MainActor in
