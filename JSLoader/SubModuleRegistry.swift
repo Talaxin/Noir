@@ -48,10 +48,10 @@ extension JSContext {
 
         let registerBlock: @convention(block) (String, String, JSValue, JSValue) -> Void = { name, code, resolve, reject in
             let wrapped = """
-            (function() {
+            (function(soraFetch, fetchv2, fetch) {
             \(code)
             return { extractStreamUrl: extractStreamUrl };
-            })()
+            })(soraFetch, fetchv2, fetch);
             """
             guard let result = ctx.evaluateScript(wrapped) else {
                 let message = ctx.exception?.toString() ?? "Submodule eval failed"

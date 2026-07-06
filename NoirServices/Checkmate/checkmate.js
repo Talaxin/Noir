@@ -3,14 +3,14 @@
  * Sub-modules loaded at runtime from 50n50/sources (VidEasy, VidLink, VidFast, Hexa, VidCore).
  */
 const HREF_BASE = "noir-checkmate:///";
+const NOIR_PROVIDER_BASE = "https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/Checkmate/providers";
 const scriptCache = {};
 
 const SOURCES = [
+    { name: "VidLink", url: NOIR_PROVIDER_BASE + "/vidlink.js" },
     { name: "VidEasy", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/videasy/videasy.js" },
-    { name: "VidLink", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidlink/vidlink.js" },
     { name: "VidFast", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidfast/vidfast.js" },
-    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" },
-    { name: "VidCore", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidcore/vidcore.js" }
+    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" }
 ];
 
 const SOURCE_NAMES = {
@@ -382,23 +382,23 @@ async function extractStreamUrl(ID) {
         const streamID = normalizeStreamID(ID);
         let defaultSubtitle = null;
         if (media.type === "movie" && media.tmdbId) {
-            const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt").catch(() => null);
-            if (subResponse) {
-                const subtitles = await subResponse.json().catch(() => null);
+            try {
+                const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt");
+                const subtitles = await subResponse.json();
                 if (Array.isArray(subtitles)) {
                     var enSub = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
                     defaultSubtitle = (enSub && enSub.url) ? enSub.url : null;
                 }
-            }
+            } catch (e) { /* optional subs */ }
         } else if (media.type === "tv" && media.tmdbId) {
-            const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt&season=" + encodeURIComponent(media.season) + "&episode=" + encodeURIComponent(media.episode)).catch(() => null);
-            if (subResponse) {
-                const subtitles = await subResponse.json().catch(() => null);
+            try {
+                const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt&season=" + encodeURIComponent(media.season) + "&episode=" + encodeURIComponent(media.episode));
+                const subtitles = await subResponse.json();
                 if (Array.isArray(subtitles)) {
-                    var enSub = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
-                    defaultSubtitle = (enSub && enSub.url) ? enSub.url : null;
+                    var enSubTv = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
+                    defaultSubtitle = (enSubTv && enSubTv.url) ? enSubTv.url : null;
                 }
-            }
+            } catch (e) { /* optional subs */ }
         }
 
         const promises = SOURCES.map(async (source) => {
@@ -406,7 +406,8 @@ async function extractStreamUrl(ID) {
                 const mod = await getModule(source.name, source.url);
                 if (!mod) return null;
                 const resText = await mod.extractStreamUrl(streamID);
-                return { source, data: JSON.parse(resText) };
+                const parsed = JSON.parse(resText);
+                return { source, data: parsed };
             } catch (err) {
                 console.log("Error running " + source.name + ": " + err.message);
                 return null;
@@ -441,26 +442,39 @@ async function extractStreamUrl(ID) {
                         });
                     }
                 } else {
-                data.streams.forEach(stream => {
-                    let origTitle = stream.title || "Default";
-                    
-                    let quality = "1080p";
-                    const qualityMatch = origTitle.match(/(4K|2160p|1080p|720p|480p|360p)/i);
+                data.streams.forEach(function(stream) {
+                    var origTitle = stream.title || "Default";
+                    var streamUrl = stream.streamUrl || stream.url || "";
+                    if (!streamUrl || streamUrl.indexOf("http") !== 0) return;
+
+                    var quality = "1080p";
+                    var qualityMatch = origTitle.match(/(4K|2160p|1080p|720p|480p|360p|\d+p)/i);
                     if (qualityMatch) {
                         quality = qualityMatch[0].toLowerCase();
-                    } else if (origTitle.toLowerCase().includes("hd")) {
+                        if (/^\d+p$/.test(quality) && quality.length <= 4) { /* ok */ }
+                    } else if (origTitle.toLowerCase().indexOf("hd") >= 0) {
                         quality = "720p";
                     }
-                    
-                    const flagMatch = origTitle.match(/[\uD83C][\uDDE6-\uDDFF]/g);
-                    const emoji = (flagMatch && flagMatch.length >= 2) ? flagMatch.join('') : (origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/) ? origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/)[0] : "🇺🇸");
-                    
-                    const title = `${mappedName} ${quality.toUpperCase()} ${emoji}`;
+
+                    var flagMatch = origTitle.match(/[\uD83C][\uDDE6-\uDDFF]/g);
+                    var emoji = (flagMatch && flagMatch.length >= 2) ? flagMatch.join("") : (origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/) ? origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/)[0] : "🇺🇸");
+
+                    var serverHint = origTitle.replace(/\[.*?\]/g, "").trim();
+                    var title = mappedName + " " + quality.toUpperCase();
+                    if (serverHint && serverHint.toLowerCase() !== "default" && serverHint.toLowerCase() !== quality.toLowerCase()) {
+                        title += " (" + serverHint + ")";
+                    }
+                    title += " " + emoji;
+
+                    var hdrs = stream.headers || (data.referer ? { Referer: data.referer } : {});
+                    if (!hdrs["User-Agent"]) {
+                        hdrs["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+                    }
 
                     allStreams.push({
                         title: title,
-                        streamUrl: stream.streamUrl || stream.url || stream,
-                        headers: stream.headers || (data.referer ? { "Referer": data.referer } : {}),
+                        streamUrl: streamUrl,
+                        headers: hdrs,
                         sourceMapped: mappedName
                     });
                 });

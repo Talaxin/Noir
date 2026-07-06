@@ -746,7 +746,7 @@ struct ModulesSearchResultsSheet: View {
         }
         guard let svc = viewModel.miruroFallbackService else { return }
         let next = viewModel.miruroFallbackQueue.removeFirst()
-        Logger.shared.log("Miruro: server failed, trying next (\(next.name))", type: "Stream")
+        Logger.shared.log("\(svc.metadata.sourceName): server failed, trying next (\(next.name))", type: "Stream")
         playStreamURL(next.url, service: svc, subtitle: nil, headers: next.headers, externalSubtitleTracks: viewModel.miruroFallbackExternalSubs)
     }
     
@@ -1095,12 +1095,12 @@ struct ModulesSearchResultsSheet: View {
         
         let availableStreams = parseStreamOptions(streams: streams, sources: sources)
 
-        // Miruro: use best server first (module order: HLS, quality); on playback failure try next automatically.
-        if service.metadata.sourceName == "Miruro", availableStreams.count > 1 {
+        // Miruro / Checkmate: use best server first; on playback failure try next automatically.
+        if isAggregatorWithStreamFallback(service), availableStreams.count > 1 {
             if downloadIntent {
                 viewModel.isFetchingStreams = false
                 let best = availableStreams[0]
-                Logger.shared.log("Miruro download: using best of \(availableStreams.count) servers (\(best.name))", type: "Stream")
+                Logger.shared.log("\(service.metadata.sourceName) download: using best of \(availableStreams.count) servers (\(best.name))", type: "Stream")
                 resolveSubtitleSelection(
                     subtitles: subtitles,
                     defaultSubtitle: best.subtitle,
@@ -1114,7 +1114,7 @@ struct ModulesSearchResultsSheet: View {
             viewModel.miruroFallbackService = service
             viewModel.isFetchingStreams = false
             let best = availableStreams[0]
-            Logger.shared.log("Miruro: playing best server first (\(best.name)); \(viewModel.miruroFallbackQueue.count) fallback(s) if needed", type: "Stream")
+            Logger.shared.log("\(service.metadata.sourceName): playing best server first (\(best.name)); \(viewModel.miruroFallbackQueue.count) fallback(s) if needed", type: "Stream")
             resolveSubtitleSelection(
                 subtitles: subtitles,
                 defaultSubtitle: best.subtitle,
@@ -1125,7 +1125,7 @@ struct ModulesSearchResultsSheet: View {
             return
         }
         
-        if service.metadata.sourceName == "Miruro" {
+        if service.metadata.sourceName == "Miruro" || isCheckmateService(service) {
             // This playback has no fallback chain; avoid stale "last server" state.
             viewModel.clearMiruroFallbackContext()
         }
@@ -1296,13 +1296,30 @@ struct ModulesSearchResultsSheet: View {
         return options
     }
     
+    private func isCheckmateService(_ service: Service) -> Bool {
+        service.metadata.sourceName.localizedCaseInsensitiveContains("Checkmate")
+    }
+
+    private func isAggregatorWithStreamFallback(_ service: Service) -> Bool {
+        service.metadata.sourceName == "Miruro" || isCheckmateService(service)
+    }
+
+    private func defaultRefererBase(for service: Service) -> String? {
+        let base = service.metadata.baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, let url = URL(string: base), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
+        return base
+    }
+
     private func enqueueDownload(streamURL url: String, service: Service, subtitle: String?, headers: [String: String]?) {
         let serviceURL = service.metadata.baseUrl
         var finalHeaders: [String: String] = [
-            "Origin": serviceURL,
-            "Referer": serviceURL,
             "User-Agent": URLSession.randomUserAgent
         ]
+        if let refererBase = defaultRefererBase(for: service) {
+            finalHeaders["Origin"] = refererBase
+            finalHeaders["Referer"] = refererBase
+        }
         if let custom = headers {
             for (k, v) in custom { finalHeaders[k] = v }
             if finalHeaders["User-Agent"] == nil { finalHeaders["User-Agent"] = URLSession.randomUserAgent }
@@ -1393,10 +1410,12 @@ struct ModulesSearchResultsSheet: View {
             }
             
             var finalHeaders: [String: String] = [
-                "Origin": service.metadata.baseUrl,
-                "Referer": service.metadata.baseUrl,
                 "User-Agent": URLSession.randomUserAgent
             ]
+            if let refererBase = defaultRefererBase(for: service) {
+                finalHeaders["Origin"] = refererBase
+                finalHeaders["Referer"] = refererBase
+            }
             if let custom = headers {
                 Logger.shared.log("Using custom headers: \(custom)", type: "Stream")
                 for (k, v) in custom { finalHeaders[k] = v }
@@ -1482,8 +1501,8 @@ struct ModulesSearchResultsSheet: View {
                 return
             } else {
                 var urlToPlay = streamURL
-                let isMiruro = service.metadata.sourceName == "Miruro"
-                let extSubs = isMiruro ? viewModel.miruroFallbackExternalSubs : externalSubtitleTracks
+                let usesStreamFallback = isAggregatorWithStreamFallback(service)
+                let extSubs = (service.metadata.sourceName == "Miruro") ? viewModel.miruroFallbackExternalSubs : externalSubtitleTracks
                 let wantsNativeSoftSubs = !extSubs.isEmpty
 
                 var proxyBase: String? = nil
@@ -1501,13 +1520,13 @@ struct ModulesSearchResultsSheet: View {
                 Task { @MainActor in
                     var playURL = urlToPlay
                     let playerVC = NormalPlayer()
-                    playerVC.miruroTryNextServerOnFailure = isMiruro && !viewModel.miruroFallbackQueue.isEmpty
-                    playerVC.miruroLastServerAttempt = isMiruro && viewModel.miruroFallbackQueue.isEmpty && viewModel.miruroFallbackService != nil
+                    playerVC.miruroTryNextServerOnFailure = usesStreamFallback && !viewModel.miruroFallbackQueue.isEmpty
+                    playerVC.miruroLastServerAttempt = usesStreamFallback && viewModel.miruroFallbackQueue.isEmpty && viewModel.miruroFallbackService != nil
 
                     #if os(iOS)
                     // Keep subtitles in AVPlayer's native "... > Subtitles" menu (no custom subtitle button).
                     playerVC.softSubtitleTracks = []
-                    if isMiruro, wantsNativeSoftSubs, let proxyBase {
+                    if service.metadata.sourceName == "Miruro", wantsNativeSoftSubs, let proxyBase {
                         func isEnglishSubtitle(title: String, url: String) -> Bool {
                             let t = title.lowercased()
                             let u = url.lowercased()
