@@ -1,0 +1,20 @@
+{
+  "sourceName": "Checkmate (Tsumi)",
+  "iconUrl": "https://files.catbox.moe/krovkt.png",
+  "author": {
+    "name": "50/50",
+    "icon": "https://files.catbox.moe/741wp7.png"
+  },
+  "version": "1.0.8",
+  "language": "English",
+  "streamType": "HLS",
+  "quality": "4K",
+  "baseUrl": "noir-checkmate:///",
+  "searchBaseUrl": "noir-checkmate:///",
+  "scriptUrl": "https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/Checkmate/checkmate.js",
+  "type": "anime/movies/shows",
+  "asyncJS": true,
+  "softsub": true,
+  "multiStream": true,
+  "downloadSupport": true
+}
