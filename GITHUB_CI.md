@@ -2,6 +2,20 @@
 
 Noir builds on GitHub Actions and publishes `build/Noir.ipa` + `repo.json` to **`main`**, which Feather uses.
 
+## One-time setup (required once)
+
+GitHub blocks uploading workflow files from some git tokens. Enable CI **once** in the browser:
+
+1. Open **https://github.com/Talaxin/Noir/actions**
+2. Click **“I understand my repositories, go ahead and enable them”** if prompted
+3. Click **“New workflow”** → **“set up a workflow yourself”**
+4. Name the file: `.github/workflows/build.yml`
+5. Replace the editor contents with the file from this repo:  
+   `.github/workflows/build.yml` (on your Mac / `full-project` branch)
+6. Commit directly to the **`full-project`** branch
+
+After that, every push to `full-project` builds the IPA and updates `main` for Feather.
+
 ## Feather source URL
 
 ```
