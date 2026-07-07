@@ -55,21 +55,27 @@ jobs:
             --align-ipa-version \
             --description "$RELEASE_NOTES"
 
+      - name: Stage release artifacts
+        run: |
+          mkdir -p /tmp/noir-ci-release
+          cp build/Noir.ipa /tmp/noir-ci-release/Noir.ipa
+          cp repo.json /tmp/noir-ci-release/repo.json
+
       - name: Publish IPA to main (Feather source branch)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          IPA_PATH="$GITHUB_WORKSPACE/build/Noir.ipa"
-          REPO_JSON_PATH="$GITHUB_WORKSPACE/repo.json"
+          IPA_PATH="/tmp/noir-ci-release/Noir.ipa"
+          REPO_JSON_PATH="/tmp/noir-ci-release/repo.json"
 
           publish_branch() {
             local branch="$1"
             git fetch origin "$branch"
             git checkout "$branch"
             mkdir -p build
-            cp "$IPA_PATH" build/Noir.ipa
-            cp "$REPO_JSON_PATH" repo.json
+            cp -f "$IPA_PATH" build/Noir.ipa
+            cp -f "$REPO_JSON_PATH" repo.json
             git add -f build/Noir.ipa repo.json
             if git diff --staged --quiet; then
               echo "No release changes for $branch"
@@ -85,8 +91,8 @@ jobs:
             git fetch origin full-project
             git checkout full-project
             mkdir -p build
-            cp "$IPA_PATH" build/Noir.ipa
-            cp "$REPO_JSON_PATH" repo.json
+            cp -f "$IPA_PATH" build/Noir.ipa
+            cp -f "$REPO_JSON_PATH" repo.json
             git add -f build/Noir.ipa repo.json
             if ! git diff --staged --quiet; then
               git commit -m "CI: publish Noir.ipa for Feather [skip ci]"
