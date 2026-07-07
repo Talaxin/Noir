@@ -426,18 +426,24 @@ final class StreamProxyServer {
                 self.sendResponse(connection: connection, status: 400, body: nil) { connection.cancel() }
                 return
             }
-            self.handleRequest(connection: connection, path: request.path, query: request.query) { status, contentType, body in
-                self.sendResponse(connection: connection, status: status, contentType: contentType, body: body) {
+            self.handleRequest(connection: connection, path: request.path, query: request.query, clientHeaders: request.headers) { status, contentType, extraHeaders, body in
+                self.sendResponse(connection: connection, status: status, contentType: contentType, extraHeaders: extraHeaders, body: body) {
                     connection.cancel()
                 }
             }
         }
     }
     
-    private struct ParsedRequest { let path: String; let query: [String: String] }
+    private struct ParsedRequest {
+        let path: String
+        let query: [String: String]
+        let headers: [String: String]
+    }
     
     private static func parseRequest(_ data: Data) -> ParsedRequest? {
-        guard let line = String(data: data, encoding: .utf8)?.split(separator: "\r\n", maxSplits: 1, omittingEmptySubsequences: false).first else { return nil }
+        guard let raw = String(data: data, encoding: .utf8) else { return nil }
+        let lines = raw.split(separator: "\r\n", omittingEmptySubsequences: false)
+        guard let line = lines.first else { return nil }
         let parts = line.split(separator: " ")
         guard parts.count >= 2, parts[0] == "GET" else { return nil }
         var path = String(parts[1])
@@ -452,17 +458,27 @@ final class StreamProxyServer {
                 }
             }
         }
-        return ParsedRequest(path: path, query: query)
+        var headers: [String: String] = [:]
+        for headerLine in lines.dropFirst() {
+            if headerLine.isEmpty { break }
+            let kv = headerLine.split(separator: ":", maxSplits: 1)
+            if kv.count == 2 {
+                let key = String(kv[0]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let value = String(kv[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+                headers[key] = value
+            }
+        }
+        return ParsedRequest(path: path, query: query, headers: headers)
     }
     
-    private func handleRequest(connection: NWConnection, path: String, query: [String: String], completion: @escaping (Int, String?, Data?) -> Void) {
+    private func handleRequest(connection: NWConnection, path: String, query: [String: String], clientHeaders: [String: String], completion: @escaping (Int, String?, [String: String]?, Data?) -> Void) {
         if path == "/__noir_ready" {
-            completion(200, "text/plain", Data("ok".utf8))
+            completion(200, "text/plain", nil, Data("ok".utf8))
             return
         }
         if let body = extraPlaylistBodies[path] {
             Logger.shared.log("Proxy serving in-memory playlist: \(path)", type: "Stream")
-            completion(200, "application/vnd.apple.mpegurl", body)
+            completion(200, "application/vnd.apple.mpegurl", nil, body)
             return
         }
         let targetURL: String?
@@ -488,11 +504,11 @@ final class StreamProxyServer {
             Logger.shared.log("Proxy fetching: \(preview)", type: "Stream")
             targetURL = u
         } else {
-            completion(404, nil, nil)
+            completion(404, nil, nil, nil)
             return
         }
         guard let urlString = targetURL, let url = URL(string: urlString) else {
-            completion(400, nil, nil)
+            completion(400, nil, nil, nil)
             return
         }
         let isSubtitleLike: Bool = {
@@ -504,6 +520,12 @@ final class StreamProxyServer {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         for (k, v) in hdrs { request.setValue(v, forHTTPHeaderField: k) }
+        if let range = clientHeaders["range"], !range.isEmpty {
+            request.setValue(range, forHTTPHeaderField: "Range")
+        }
+        if let ifRange = clientHeaders["if-range"], !ifRange.isEmpty {
+            request.setValue(ifRange, forHTTPHeaderField: "If-Range")
+        }
         
         let finish: (Data?, URLResponse?, Error?) -> Void = { [weak self] data, response, error in
             guard let self = self else { return }
@@ -514,44 +536,46 @@ final class StreamProxyServer {
                     let retry = self.insecureSession.dataTask(with: request) { data2, resp2, err2 in
                         if let err2 {
                             Logger.shared.log("Proxy subtitle insecure fetch error: \(err2)", type: "Stream")
-                            completion(502, nil, nil)
+                            completion(502, nil, nil, nil)
                             return
                         }
                         let code2 = (resp2 as? HTTPURLResponse)?.statusCode ?? 500
-                        guard code2 == 200, let body2 = data2 else {
+                        guard (200...299).contains(code2), let body2 = data2 else {
                             Logger.shared.log("Proxy subtitle insecure upstream HTTP \(code2) for \(urlString)", type: "Stream")
-                            completion(code2, nil, nil)
+                            completion(code2, nil, nil, nil)
                             return
                         }
-                        let contentType2 = (resp2 as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
+                        let http2 = resp2 as? HTTPURLResponse
+                        let contentType2 = http2?.value(forHTTPHeaderField: "Content-Type") ?? ""
                         let normalized2 = self.normalizeSubtitleForAVPlayerIfNeeded(data: body2, targetURL: urlString, contentType: contentType2)
                         let shifted2 = self.shiftSubtitleTimingIfNeeded(data: normalized2, delaySeconds: requestedSubtitleDelay)
                         let replyType2 = isSubtitleLike ? "text/vtt" : (contentType2.isEmpty ? nil : contentType2)
-                        completion(200, replyType2, shifted2)
+                        completion(code2, replyType2, self.upstreamPassthroughHeaders(http2), shifted2)
                     }
                     retry.resume()
                     return
                 }
                 Logger.shared.log("Proxy fetch error: \(err)", type: "Stream")
-                completion(502, nil, nil)
+                completion(502, nil, nil, nil)
                 return
             }
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 500
-            guard code == 200, let body = data else {
+            let http = response as? HTTPURLResponse
+            let code = http?.statusCode ?? 500
+            guard (200...299).contains(code), let body = data else {
                 Logger.shared.log("Proxy upstream HTTP \(code) for \(urlString)", type: "Stream")
-                completion(code, nil, nil)
+                completion(code, nil, nil, nil)
                 return
             }
-            let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
+            let contentType = http?.value(forHTTPHeaderField: "Content-Type") ?? ""
             let isM3u8 = urlString.contains(".m3u8") || contentType.contains("mpegurl") || contentType.contains("m3u8")
             let isRootStreamRequest = path == "/s" || path == "/s/" || path.hasPrefix("/s/")
             if !isM3u8, isRootStreamRequest {
                 let wrapped = self.makeSingleFileHLSPlaylist(sourceURL: urlString)
                 Logger.shared.log("Proxy wrapping progressive stream as HLS for: \(urlString)", type: "Stream")
-                completion(200, "application/vnd.apple.mpegurl", Data(wrapped.utf8))
+                completion(200, "application/vnd.apple.mpegurl", nil, Data(wrapped.utf8))
             } else if isM3u8, let rewritten = self.rewriteM3u8(body, baseURL: url), let rewrittenData = rewritten.data(using: .utf8) {
                 Logger.shared.log("Proxy rewrote HLS playlist for: \(urlString)", type: "Stream")
-                completion(200, "application/vnd.apple.mpegurl", rewrittenData)
+                completion(200, "application/vnd.apple.mpegurl", nil, rewrittenData)
             } else {
                 let normalized = self.normalizeSubtitleForAVPlayerIfNeeded(data: body, targetURL: urlString, contentType: contentType)
                 let shifted = self.shiftSubtitleTimingIfNeeded(data: normalized, delaySeconds: requestedSubtitleDelay)
@@ -563,10 +587,22 @@ final class StreamProxyServer {
                 } else {
                     replyType = contentType.isEmpty ? nil : contentType
                 }
-                completion(200, replyType, shifted)
+                completion(code, replyType, self.upstreamPassthroughHeaders(http), shifted)
             }
         }
         URLSession.shared.dataTask(with: request, completionHandler: finish).resume()
+    }
+
+    private func upstreamPassthroughHeaders(_ response: HTTPURLResponse?) -> [String: String]? {
+        guard let response else { return nil }
+        var out: [String: String] = [:]
+        if let contentRange = response.value(forHTTPHeaderField: "Content-Range"), !contentRange.isEmpty {
+            out["Content-Range"] = contentRange
+        }
+        if let acceptRanges = response.value(forHTTPHeaderField: "Accept-Ranges"), !acceptRanges.isEmpty {
+            out["Accept-Ranges"] = acceptRanges
+        }
+        return out.isEmpty ? nil : out
     }
 
     /// Some CDNs label MPEG-TS or fMP4 as image/* (e.g. image/gif) while the body is video. AVPlayer uses Content-Type; wrong MIME prevents decoding.
@@ -744,8 +780,13 @@ final class StreamProxyServer {
             }
 
             let encoded = segmentURL.addingPercentEncoding(withAllowedCharacters: allowed) ?? segmentURL
-            // Noir runtime expects media segment lines to be TS-like entries.
-            out.append("\(proxyBase)/segment.ts?url=\(encoded)")
+            let lowerURL = segmentURL.lowercased()
+            if lowerURL.contains(".m3u8") || lowerURL.contains(".m3u") {
+                // Nested HLS playlists must stay on /proxy — /segment.ts confuses AVPlayer's resource loader.
+                out.append("\(proxyBase)/proxy?url=\(encoded)")
+            } else {
+                out.append("\(proxyBase)/segment.ts?url=\(encoded)")
+            }
             expectsURI = false
         }
 
@@ -753,7 +794,8 @@ final class StreamProxyServer {
         let proxiedCount = out.filter { $0.contains("/proxy?url=") || $0.contains("/segment.ts?url=") }.count
         let hasDirectHTTPLine = out.contains { line in
             let t = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !t.isEmpty && !t.hasPrefix("#") && t.contains("://")
+            guard !t.isEmpty, !t.hasPrefix("#"), t.contains("://") else { return false }
+            return !t.contains("127.0.0.1") && !t.contains("localhost")
         }
         let directFlag = hasDirectHTTPLine ? "YES" : "NO"
         Logger.shared.log("Proxy playlist summary: proxiedLines=\(proxiedCount) skippedUnexpectedURI=\(skippedUnexpectedURI) directHTTPNonTag=\(directFlag)", type: "Stream")
@@ -855,10 +897,21 @@ final class StreamProxyServer {
         return String(format: "%02d:%02d:%02d%@%03d", h, m, s, sep, ms)
     }
 
-    private func sendResponse(connection: NWConnection, status: Int, contentType: String? = nil, body: Data?, completion: @escaping () -> Void = {}) {
-        var head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r\n"
+    private func sendResponse(connection: NWConnection, status: Int, contentType: String? = nil, extraHeaders: [String: String]? = nil, body: Data?, completion: @escaping () -> Void = {}) {
+        let reason: String
+        switch status {
+        case 200: reason = "OK"
+        case 206: reason = "Partial Content"
+        default: reason = status >= 400 ? "Error" : "OK"
+        }
+        var head = "HTTP/1.1 \(status) \(reason)\r\n"
         head += "Connection: close\r\n"
         if let ct = contentType { head += "Content-Type: \(ct)\r\n" }
+        if let extraHeaders {
+            for (key, value) in extraHeaders.sorted(by: { $0.key < $1.key }) {
+                head += "\(key): \(value)\r\n"
+            }
+        }
         if let b = body {
             head += "Content-Length: \(b.count)\r\n"
             head += "\r\n"

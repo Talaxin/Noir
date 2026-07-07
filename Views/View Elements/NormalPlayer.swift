@@ -71,6 +71,8 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
     var miruroTryNextServerOnFailure = false
     /// True when this is the last Miruro server in the fallback chain (show “all failed” on error).
     var miruroLastServerAttempt = false
+    /// How long to wait in `waitingToPlayAtSpecifiedRate` before auto-trying the next server.
+    var stallFallbackDelaySeconds: Double = 30.0
     
 #if os(iOS)
     private var holdGesture: UILongPressGestureRecognizer?
@@ -272,7 +274,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
             case .waitingToPlayAtSpecifiedRate:
                 // Guardrail: if startup remains stuck in waiting for a long time with no progress,
                 // trigger fallback. Keep delay generous to avoid premature server cycling.
-                self.scheduleMiruroFallbackIfStillStalled(reason: "prolonged startup waiting", delaySeconds: 30.0)
+                self.scheduleMiruroFallbackIfStillStalled(reason: "prolonged startup waiting", delaySeconds: self.stallFallbackDelaySeconds)
             case .playing:
                 self.miruroStallFallbackWorkItem?.cancel()
                 self.miruroStallFallbackWorkItem = nil

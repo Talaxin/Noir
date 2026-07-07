@@ -1304,19 +1304,12 @@ struct ModulesSearchResultsSheet: View {
         service.metadata.sourceName == "Miruro" || isCheckmateService(service)
     }
 
-    /// HLS playlists need the local proxy; progressive MP4/WebM can play directly with Referer headers.
+    /// HLS playlists need the local proxy; progressive files with Referer headers also go through the proxy wrapper.
     private func isLikelyHLSStreamURL(_ url: String) -> Bool {
         let lower = url.lowercased()
         if lower.contains(".m3u8") || lower.contains(".m3u") { return true }
         if lower.contains(".mpd") { return true }
         return false
-    }
-
-    /// VidLink and similar CDNs often serve HEVC MP4; AVPlayer may play audio only in Normal player.
-    private func isHEVCProgressiveURL(_ url: String) -> Bool {
-        guard !isLikelyHLSStreamURL(url) else { return false }
-        let lower = url.lowercased()
-        return lower.contains("/h265/") || lower.contains("hevc") || lower.contains("hvc1")
     }
 
     private func defaultRefererBase(for service: Service) -> String? {
@@ -1495,12 +1488,8 @@ struct ModulesSearchResultsSheet: View {
             
             let inAppRaw = UserDefaults.standard.string(forKey: "inAppPlayer") ?? "Normal"
             let inAppPlayer = (inAppRaw == "mpv") ? "mpv" : "Normal"
-            let useMPVPlayer = inAppPlayer == "mpv" || (inAppPlayer == "Normal" && isHEVCProgressiveURL(url))
-            if useMPVPlayer && inAppPlayer != "mpv" {
-                Logger.shared.log("HEVC progressive stream: using MPV player (Normal player is audio-only for this format)", type: "Stream")
-            }
             
-            if useMPVPlayer {
+            if inAppPlayer == "mpv" {
                 let preset = PlayerPreset.presets.first
                 let subURLs: [String] = externalSubtitleTracks.isEmpty ? (subtitle.map { [$0] } ?? []) : externalSubtitleTracks.map(\.url)
                 let subtitleArray: [String]? = subURLs.isEmpty ? nil : subURLs
@@ -1531,7 +1520,8 @@ struct ModulesSearchResultsSheet: View {
                 let wantsNativeSoftSubs = !extSubs.isEmpty
 
                 var proxyBase: String? = nil
-                let shouldProxyInApp = wantsNativeSoftSubs || (needsHeaders && streamIsHLS)
+                // Normal player cannot attach Referer to every HLS segment / progressive byte-range request — proxy required.
+                let shouldProxyInApp = wantsNativeSoftSubs || (needsHeaders && (streamIsHLS || hasCustomHeaders))
                 if shouldProxyInApp {
                     let (metadataFilename, displayTitle) = Self.infuseMetadataFilename(mediaTitle: mediaTitle, tmdbId: tmdbId, isMovie: isMovie, episode: selectedEpisode)
                     if let proxyURLString = StreamProxyServer.shared.start(streamURL: url, headers: finalHeaders, metadataFilename: metadataFilename, displayTitle: displayTitle),
@@ -1541,8 +1531,6 @@ struct ModulesSearchResultsSheet: View {
                         urlToPlay = proxyURL
                         Logger.shared.log("Proxying stream for in-app player so segments get headers", type: "Stream")
                     }
-                } else if hasCustomHeaders {
-                    Logger.shared.log("Playing progressive stream directly with custom headers (no HLS proxy)", type: "Stream")
                 }
                 
                 Task { @MainActor in
@@ -1550,6 +1538,9 @@ struct ModulesSearchResultsSheet: View {
                     let playerVC = NormalPlayer()
                     playerVC.miruroTryNextServerOnFailure = usesStreamFallback && !viewModel.miruroFallbackQueue.isEmpty
                     playerVC.miruroLastServerAttempt = usesStreamFallback && viewModel.miruroFallbackQueue.isEmpty && viewModel.miruroFallbackService != nil
+                    if isCheckmateService(service), streamIsHLS || shouldProxyInApp {
+                        playerVC.stallFallbackDelaySeconds = 90.0
+                    }
 
                     #if os(iOS)
                     // Keep subtitles in AVPlayer's native "... > Subtitles" menu (no custom subtitle button).
