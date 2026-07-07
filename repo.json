@@ -17,14 +17,22 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.40",
-      "versionDate": "2026-07-06T19:45:00-07:00",
-      "versionDescription": "Checkmate audit: upstream provider order, new Function sub-modules, HLS-first fast-start, setTimeout bridge.",
+      "version": "1.0.41",
+      "versionDate": "2026-07-06T22:12:27-07:00",
+      "versionDescription": "Noir 1.0.41 \u2014 CI test build (Option A).",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
+        {
+          "version": "1.0.41",
+          "date": "2026-07-06T22:12:27-07:00",
+          "localizedDescription": "Noir 1.0.41 \u2014 CI test build (Option A).",
+          "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
+          "size": 24480698,
+          "minOSVersion": "15.0"
+        },
         {
           "version": "1.0.40",
           "date": "2026-07-06T19:45:00-07:00",
