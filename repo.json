@@ -17,20 +17,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.37",
-      "versionDate": "2026-07-06T17:12:23-07:00",
-      "versionDescription": "Checkmate: pick best quality server first, auto-fallback if stream fails or is audio-only.",
+      "version": "1.0.38",
+      "versionDate": "2026-07-06T18:40:41-07:00",
+      "versionDescription": "Checkmate fast-start: poll all providers in parallel, play first working stream while others load.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.37",
-          "date": "2026-07-06T17:12:23-07:00",
-          "localizedDescription": "Checkmate: pick best quality server first, auto-fallback if stream fails or is audio-only.",
+          "version": "1.0.38",
+          "date": "2026-07-06T18:40:41-07:00",
+          "localizedDescription": "Checkmate fast-start: poll all providers in parallel, play first working stream while others load.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24470441,
+          "size": 24470547,
           "minOSVersion": "15.0"
         }
       ]

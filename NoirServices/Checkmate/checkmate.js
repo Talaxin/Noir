@@ -382,152 +382,229 @@ async function extractEpisodes(url) {
     }
 }
 
+const PROVIDER_TIMEOUT_MS = 14000;
+const GLOBAL_POLL_TIMEOUT_MS = 20000;
+
+function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error(label + " timeout")); }, ms);
+        })
+    ]);
+}
+
+async function fetchDefaultSubtitle(media) {
+    try {
+        if (media.type === "movie" && media.tmdbId) {
+            const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt");
+            const subtitles = await subResponse.json();
+            if (Array.isArray(subtitles)) {
+                var enSub = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
+                return (enSub && enSub.url) ? enSub.url : "";
+            }
+        } else if (media.type === "tv" && media.tmdbId) {
+            const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt&season=" + encodeURIComponent(media.season) + "&episode=" + encodeURIComponent(media.episode));
+            const subtitles = await subResponse.json();
+            if (Array.isArray(subtitles)) {
+                var enSubTv = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
+                return (enSubTv && enSubTv.url) ? enSubTv.url : "";
+            }
+        }
+    } catch (e) { /* optional */ }
+    return "";
+}
+
+function streamsFromProviderResult(source, data) {
+    if (!data || !Array.isArray(data.streams)) return [];
+    const sourceName = source.name;
+    const mappedName = SOURCE_NAMES[sourceName] || sourceName;
+    const out = [];
+
+    if (data.streams.length > 0 && typeof data.streams[0] === "string") {
+        for (let i = 0; i < data.streams.length; i += 2) {
+            const label = data.streams[i] || "Default";
+            const url = data.streams[i + 1];
+            if (!url || url.indexOf("http") !== 0) continue;
+            let quality = "1080p";
+            const qualityMatch = String(label).match(/(4K|2160p|1080p|720p|480p|360p)/i);
+            if (qualityMatch) quality = qualityMatch[0].toLowerCase();
+            const title = mappedName + " " + quality.toUpperCase() + " 🇺🇸";
+            var hdrs = data.referer ? { Referer: data.referer } : (sourceName === "VidFast" ? VIDFAST_HEADERS : {});
+            out.push({
+                title: title,
+                streamUrl: url,
+                headers: hdrs,
+                sourceMapped: mappedName
+            });
+        }
+        return out;
+    }
+
+    data.streams.forEach(function(stream) {
+        var origTitle = stream.title || "Default";
+        var streamUrl = stream.streamUrl || stream.url || "";
+        if (!streamUrl || streamUrl.indexOf("http") !== 0) return;
+
+        var quality = "1080p";
+        var qualityMatch = origTitle.match(/(4K|2160p|1080p|720p|480p|360p|\d+p)/i);
+        if (qualityMatch) {
+            quality = qualityMatch[0].toLowerCase();
+        } else if (origTitle.toLowerCase().indexOf("hd") >= 0) {
+            quality = "720p";
+        }
+
+        var flagMatch = origTitle.match(/[\uD83C][\uDDE6-\uDDFF]/g);
+        var emoji = (flagMatch && flagMatch.length >= 2) ? flagMatch.join("") : (origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/) ? origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/)[0] : "🇺🇸");
+
+        var serverHint = origTitle.replace(/\[.*?\]/g, "").trim();
+        var title = mappedName + " " + quality.toUpperCase();
+        if (serverHint && serverHint.toLowerCase() !== "default" && serverHint.toLowerCase() !== quality.toLowerCase()) {
+            title += " (" + serverHint + ")";
+        }
+        title += " " + emoji;
+
+        var hdrs = stream.headers || (data.referer ? { Referer: data.referer } : {});
+        if (!hdrs["User-Agent"]) {
+            hdrs["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+        }
+
+        out.push({
+            title: title,
+            streamUrl: streamUrl,
+            headers: hdrs,
+            sourceMapped: mappedName
+        });
+    });
+    return out;
+}
+
+function dedupeAndSortStreams(allStreams) {
+    const seenUrls = new Set();
+    let streams = allStreams.filter(function(stream) {
+        if (!stream.streamUrl || typeof stream.streamUrl !== "string") return false;
+        if (stream.streamUrl.indexOf("http") !== 0) return false;
+        if (seenUrls.has(stream.streamUrl)) return false;
+        seenUrls.add(stream.streamUrl);
+        return true;
+    });
+
+    const getQualityWeight = (title) => {
+        const t = title.toLowerCase();
+        if (t.includes('4k') || t.includes('2160p')) return 4000;
+        if (t.includes('1080p') || t.includes('fhd')) return 1080;
+        if (t.includes('720p') || t.includes('hd')) return 720;
+        if (t.includes('480p') || t.includes('sd')) return 480;
+        if (t.includes('360p')) return 360;
+        return 0;
+    };
+
+    streams.sort((a, b) => {
+        const qualA = getQualityWeight(a.title);
+        const qualB = getQualityWeight(b.title);
+        if (qualA !== qualB) return qualB - qualA;
+        const prioA = SOURCE_PRIORITY[a.sourceMapped] || 0;
+        const prioB = SOURCE_PRIORITY[b.sourceMapped] || 0;
+        return prioB - prioA;
+    });
+    return streams;
+}
+
+function emitCheckmateProgress(allStreams, subtitle) {
+    if (typeof noirOnStreamsProgress !== "function" || !allStreams.length) return;
+    const payload = {
+        streams: allStreams.map(function(s) { return { title: s.title, streamUrl: s.streamUrl, headers: s.headers }; }),
+        subtitles: subtitle || "",
+        subtitle: subtitle || "",
+        partial: true
+    };
+    try {
+        noirOnStreamsProgress(JSON.stringify(payload));
+    } catch (e) {
+        console.log("emitCheckmateProgress failed: " + e.message);
+    }
+}
+
+async function runProvider(source, streamID) {
+    const mod = await getModule(source.name, source.url);
+    if (!mod) return [];
+    const resText = await mod.extractStreamUrl(streamID);
+    const parsed = JSON.parse(resText);
+    return streamsFromProviderResult(source, parsed);
+}
+
 async function extractStreamUrl(ID) {
     try {
         const media = parseMediaPath(ID);
         const streamID = normalizeStreamID(ID);
-        let defaultSubtitle = null;
-        if (media.type === "movie" && media.tmdbId) {
-            try {
-                const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt");
-                const subtitles = await subResponse.json();
-                if (Array.isArray(subtitles)) {
-                    var enSub = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
-                    defaultSubtitle = (enSub && enSub.url) ? enSub.url : null;
-                }
-            } catch (e) { /* optional subs */ }
-        } else if (media.type === "tv" && media.tmdbId) {
-            try {
-                const subResponse = await fetchv2("https://sub.wyzie.ru/search?id=" + encodeURIComponent(media.tmdbId) + "&format=srt&season=" + encodeURIComponent(media.season) + "&episode=" + encodeURIComponent(media.episode));
-                const subtitles = await subResponse.json();
-                if (Array.isArray(subtitles)) {
-                    var enSubTv = subtitles.find(function(sub) { return sub.language && sub.language.toLowerCase() === "en"; });
-                    defaultSubtitle = (enSubTv && enSubTv.url) ? enSubTv.url : null;
-                }
-            } catch (e) { /* optional subs */ }
-        }
+        const subtitlePromise = fetchDefaultSubtitle(media);
 
-        const promises = SOURCES.map(async (source) => {
-            try {
-                const mod = await getModule(source.name, source.url);
-                if (!mod) return null;
-                const resText = await mod.extractStreamUrl(streamID);
-                const parsed = JSON.parse(resText);
-                return { source, data: parsed };
-            } catch (err) {
-                console.log("Error running " + source.name + ": " + err.message);
-                return null;
-            }
-        });
-
-        const results = await Promise.all(promises);
+        // Preload all provider scripts in parallel (cached after first load).
+        await Promise.all(SOURCES.map(function(s) {
+            return getModule(s.name, s.url).catch(function() { return null; });
+        }));
 
         let allStreams = [];
+        let defaultSubtitle = "";
+        let finished = 0;
 
-        results.forEach(res => {
-            if (!res || !res.data) return;
-            const sourceName = res.source.name;
-            const data = res.data;
-            const mappedName = SOURCE_NAMES[sourceName] || sourceName;
+        const outputPayload = async function() {
+            const subtitle = defaultSubtitle || await subtitlePromise.catch(function() { return ""; });
+            const sorted = dedupeAndSortStreams(allStreams);
+            return JSON.stringify({
+                streams: sorted.map(function(s) { return { title: s.title, streamUrl: s.streamUrl, headers: s.headers }; }),
+                subtitles: subtitle,
+                subtitle: subtitle,
+                partial: false
+            });
+        };
 
-            if (Array.isArray(data.streams)) {
-                if (data.streams.length > 0 && typeof data.streams[0] === "string") {
-                    for (let i = 0; i < data.streams.length; i += 2) {
-                        const label = data.streams[i] || "Default";
-                        const url = data.streams[i + 1];
-                        if (!url || url.indexOf("http") !== 0) continue;
-                        let quality = "1080p";
-                        const qualityMatch = String(label).match(/(4K|2160p|1080p|720p|480p|360p)/i);
-                        if (qualityMatch) quality = qualityMatch[0].toLowerCase();
-                        const title = mappedName + " " + quality.toUpperCase() + " 🇺🇸";
-                        var hdrs = data.referer ? { Referer: data.referer } : (sourceName === "VidFast" ? VIDFAST_HEADERS : {});
-                        allStreams.push({
-                            title: title,
-                            streamUrl: url,
-                            headers: hdrs,
-                            sourceMapped: mappedName
-                        });
-                    }
-                } else {
-                data.streams.forEach(function(stream) {
-                    var origTitle = stream.title || "Default";
-                    var streamUrl = stream.streamUrl || stream.url || "";
-                    if (!streamUrl || streamUrl.indexOf("http") !== 0) return;
+        return await new Promise(function(resolve) {
+            let resolved = false;
+            function finish() {
+                if (resolved) return;
+                resolved = true;
+                outputPayload().then(resolve);
+            }
 
-                    var quality = "1080p";
-                    var qualityMatch = origTitle.match(/(4K|2160p|1080p|720p|480p|360p|\d+p)/i);
-                    if (qualityMatch) {
-                        quality = qualityMatch[0].toLowerCase();
-                        if (/^\d+p$/.test(quality) && quality.length <= 4) { /* ok */ }
-                    } else if (origTitle.toLowerCase().indexOf("hd") >= 0) {
-                        quality = "720p";
-                    }
+            if (!SOURCES.length) {
+                finish();
+                return;
+            }
 
-                    var flagMatch = origTitle.match(/[\uD83C][\uDDE6-\uDDFF]/g);
-                    var emoji = (flagMatch && flagMatch.length >= 2) ? flagMatch.join("") : (origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/) ? origTitle.match(/[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/)[0] : "🇺🇸");
+            const globalTimer = setTimeout(function() {
+                console.log("Checkmate: global poll timeout with " + allStreams.length + " stream(s)");
+                finish();
+            }, GLOBAL_POLL_TIMEOUT_MS);
 
-                    var serverHint = origTitle.replace(/\[.*?\]/g, "").trim();
-                    var title = mappedName + " " + quality.toUpperCase();
-                    if (serverHint && serverHint.toLowerCase() !== "default" && serverHint.toLowerCase() !== quality.toLowerCase()) {
-                        title += " (" + serverHint + ")";
-                    }
-                    title += " " + emoji;
+            subtitlePromise.then(function(sub) {
+                if (sub) defaultSubtitle = sub;
+                if (allStreams.length) emitCheckmateProgress(dedupeAndSortStreams(allStreams), defaultSubtitle);
+            });
 
-                    var hdrs = stream.headers || (data.referer ? { Referer: data.referer } : {});
-                    if (!hdrs["User-Agent"]) {
-                        hdrs["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
-                    }
-
-                    allStreams.push({
-                        title: title,
-                        streamUrl: streamUrl,
-                        headers: hdrs,
-                        sourceMapped: mappedName
+            SOURCES.forEach(function(source) {
+                withTimeout(runProvider(source, streamID), PROVIDER_TIMEOUT_MS, source.name)
+                    .then(function(streams) {
+                        if (streams && streams.length) {
+                            allStreams = allStreams.concat(streams);
+                            const sorted = dedupeAndSortStreams(allStreams);
+                            allStreams = sorted;
+                            console.log("Checkmate: " + source.name + " returned " + streams.length + " stream(s)");
+                            emitCheckmateProgress(sorted, defaultSubtitle);
+                        }
+                    })
+                    .catch(function(err) {
+                        console.log("Checkmate: " + source.name + " failed — " + err.message);
+                    })
+                    .finally(function() {
+                        finished += 1;
+                        if (finished >= SOURCES.length) {
+                            clearTimeout(globalTimer);
+                            finish();
+                        }
                     });
-                });
-                }
-            }
+            });
         });
-
-        const seenUrls = new Set();
-        allStreams = allStreams.filter(function(stream) {
-            if (!stream.streamUrl || typeof stream.streamUrl !== "string") return false;
-            if (stream.streamUrl.indexOf("http") !== 0) return false;
-            if (seenUrls.has(stream.streamUrl)) return false;
-            seenUrls.add(stream.streamUrl);
-            return true;
-        });
-
-        const getQualityWeight = (title) => {
-            const t = title.toLowerCase();
-            if (t.includes('4k') || t.includes('2160p')) return 4000;
-            if (t.includes('1080p') || t.includes('fhd')) return 1080;
-            if (t.includes('720p') || t.includes('hd')) return 720;
-            if (t.includes('480p') || t.includes('sd')) return 480;
-            if (t.includes('360p')) return 360;
-            return 0;
-        };
-
-        allStreams.sort((a, b) => {
-            const qualA = getQualityWeight(a.title);
-            const qualB = getQualityWeight(b.title);
-            if (qualA !== qualB) {
-                return qualB - qualA;
-            }
-            const prioA = SOURCE_PRIORITY[a.sourceMapped] || 0;
-            const prioB = SOURCE_PRIORITY[b.sourceMapped] || 0;
-            return prioB - prioA;
-        });
-
-        const finalSubtitle = defaultSubtitle || "";
-
-        const output = {
-            streams: allStreams.map(({ title, streamUrl, headers }) => ({ title, streamUrl, headers })),
-            subtitles: finalSubtitle,
-            subtitle: finalSubtitle
-        };
-
-        return JSON.stringify(output);
     } catch (error) {
         console.log('Checkmate stream URL error: ' + error);
         return JSON.stringify({

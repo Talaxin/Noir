@@ -65,11 +65,16 @@ final class ModulesSearchResultsViewModel: ObservableObject {
     var miruroFallbackService: Service?
     /// Miruro: all subtitle tracks for the episode (CC menu in Normal player); same across server fallbacks.
     var miruroFallbackExternalSubs: [(title: String, url: String)] = []
+    /// Checkmate: start playback on first provider result while others keep polling.
+    var checkmatePlaybackStarted = false
+    var checkmateActiveStreamURL: String?
     
     func clearMiruroFallbackContext() {
         miruroFallbackQueue = []
         miruroFallbackService = nil
         miruroFallbackExternalSubs = []
+        checkmatePlaybackStarted = false
+        checkmateActiveStreamURL = nil
     }
     
     init() {
@@ -905,16 +910,27 @@ struct ModulesSearchResultsSheet: View {
     
     private func performFetchStreamForEpisode(episodeHref: String, jsController: JSController, service: Service, preferredCategory: String?) {
         if service.metadata.sourceName == "Miruro" {
-            // Fresh fetch should not inherit stale fallback state from previous playback sessions.
+            viewModel.clearMiruroFallbackContext()
+        } else if isCheckmateService(service) {
             viewModel.clearMiruroFallbackContext()
         }
         let softsub = service.metadata.softsub ?? false
-        jsController.fetchStreamUrlJS(episodeUrl: episodeHref, softsub: softsub, module: service, preferredCategory: preferredCategory) { streamResult in
+        fetchStreamsWithOptionalProgress(
+            episodeHref: episodeHref,
+            jsController: jsController,
+            service: service,
+            softsub: softsub,
+            preferredCategory: preferredCategory
+        ) { streamResult in
             Task { @MainActor in
                 let (streams, subtitles, sources) = streamResult
                 Logger.shared.log("Stream fetch result - Streams: \(streams?.count ?? 0), Sources: \(sources?.count ?? 0)", type: "Stream")
                 self.viewModel.streamFetchProgress = "Processing stream data..."
-                self.processStreamResult(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                if self.isCheckmateService(service), self.viewModel.checkmatePlaybackStarted {
+                    self.finalizeCheckmateStreamFetch(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                } else {
+                    self.processStreamResult(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                }
                 self.viewModel.resetPickerState()
             }
         }
@@ -1076,16 +1092,103 @@ struct ModulesSearchResultsSheet: View {
     
     private func performFetchStream(href: String, jsController: JSController, service: Service, preferredCategory: String?) {
         if service.metadata.sourceName == "Miruro" {
-            // Fresh fetch should not inherit stale fallback state from previous playback sessions.
+            viewModel.clearMiruroFallbackContext()
+        } else if isCheckmateService(service) {
             viewModel.clearMiruroFallbackContext()
         }
         let softsub = service.metadata.softsub ?? false
-        jsController.fetchStreamUrlJS(episodeUrl: href, softsub: softsub, module: service, preferredCategory: preferredCategory) { streamResult in
+        fetchStreamsWithOptionalProgress(
+            episodeHref: href,
+            jsController: jsController,
+            service: service,
+            softsub: softsub,
+            preferredCategory: preferredCategory
+        ) { streamResult in
             Task { @MainActor in
                 let (streams, subtitles, sources) = streamResult
-                self.processStreamResult(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                if self.isCheckmateService(service), self.viewModel.checkmatePlaybackStarted {
+                    self.finalizeCheckmateStreamFetch(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                } else {
+                    self.processStreamResult(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                }
             }
         }
+    }
+
+    private func fetchStreamsWithOptionalProgress(
+        episodeHref: String,
+        jsController: JSController,
+        service: Service,
+        softsub: Bool,
+        preferredCategory: String?,
+        completion: @escaping ((streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?)) -> Void
+    ) {
+        let useProgress = isCheckmateService(service) && !downloadIntent
+        jsController.fetchStreamUrlJS(
+            episodeUrl: episodeHref,
+            softsub: softsub,
+            module: service,
+            preferredCategory: preferredCategory,
+            onProgress: useProgress ? { streams, subtitles, sources in
+                Task { @MainActor in
+                    self.handleCheckmateStreamProgress(streams: streams, subtitles: subtitles, sources: sources, service: service)
+                }
+            } : nil,
+            completion: completion
+        )
+    }
+
+    @MainActor
+    private func handleCheckmateStreamProgress(streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?, service: Service) {
+        let availableStreams = parseStreamOptions(streams: streams, sources: sources)
+        guard !availableStreams.isEmpty else { return }
+
+        if viewModel.checkmatePlaybackStarted {
+            updateCheckmateFallbackQueue(availableStreams: availableStreams)
+            viewModel.streamFetchProgress = "Found \(availableStreams.count) server(s); still polling..."
+            return
+        }
+
+        viewModel.checkmatePlaybackStarted = true
+        viewModel.miruroFallbackService = service
+        viewModel.isFetchingStreams = false
+        let best = availableStreams[0]
+        viewModel.checkmateActiveStreamURL = best.url
+        updateCheckmateFallbackQueue(availableStreams: availableStreams)
+        Logger.shared.log("Checkmate: fast-start on \(best.name); polling \(viewModel.miruroFallbackQueue.count) more fallback(s)", type: "Stream")
+        viewModel.streamFetchProgress = "Playing \(best.name); finding more servers..."
+        resolveSubtitleSelection(
+            subtitles: subtitles,
+            defaultSubtitle: best.subtitle,
+            service: service,
+            streamURL: best.url,
+            headers: best.headers
+        )
+    }
+
+    @MainActor
+    private func finalizeCheckmateStreamFetch(streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?, service: Service) {
+        let availableStreams = parseStreamOptions(streams: streams, sources: sources)
+        viewModel.isFetchingStreams = false
+        guard !availableStreams.isEmpty else {
+            if !viewModel.checkmatePlaybackStarted {
+                viewModel.streamError = "No streams found from any provider."
+                viewModel.showingStreamError = true
+            }
+            return
+        }
+        updateCheckmateFallbackQueue(availableStreams: availableStreams)
+        Logger.shared.log("Checkmate: finished polling — \(availableStreams.count) server(s), \(viewModel.miruroFallbackQueue.count) fallback(s)", type: "Stream")
+        viewModel.streamFetchProgress = ""
+    }
+
+    @MainActor
+    private func updateCheckmateFallbackQueue(availableStreams: [StreamOption]) {
+        guard let active = viewModel.checkmateActiveStreamURL else {
+            viewModel.miruroFallbackQueue = Array(availableStreams.dropFirst())
+            return
+        }
+        viewModel.miruroFallbackQueue = availableStreams.filter { $0.url != active }
     }
     
     @MainActor
@@ -1394,12 +1497,16 @@ struct ModulesSearchResultsSheet: View {
         let savedQueue = preservesFallback ? viewModel.miruroFallbackQueue : []
         let savedSvc = preservesFallback ? viewModel.miruroFallbackService : nil
         let savedExtSubs = miruro ? viewModel.miruroFallbackExternalSubs : []
+        let savedCheckmateStarted = preservesFallback ? viewModel.checkmatePlaybackStarted : false
+        let savedCheckmateActiveURL = preservesFallback ? viewModel.checkmateActiveStreamURL : nil
         
         viewModel.resetStreamState()
         
         if preservesFallback {
             viewModel.miruroFallbackQueue = savedQueue
             viewModel.miruroFallbackService = savedSvc
+            viewModel.checkmatePlaybackStarted = savedCheckmateStarted
+            viewModel.checkmateActiveStreamURL = savedCheckmateActiveURL
             if miruro {
                 viewModel.miruroFallbackExternalSubs = savedExtSubs.isEmpty ? externalSubtitleTracks : savedExtSubs
             }
