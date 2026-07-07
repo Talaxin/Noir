@@ -33,6 +33,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
     private var miruroStallFallbackWorkItem: DispatchWorkItem?
     private var miruroStallAnchorSeconds: Double?
     private var miruroFallbackTriggered = false
+    private var audioOnlyFallbackWorkItem: DispatchWorkItem?
     var mediaInfo: MediaInfo?
 #if os(iOS)
     // Soft-subtitle overlay for cases where iOS system subtitles UI collapses tracks
@@ -106,6 +107,10 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
             readyObservation?.invalidate()
             readyObservation = nil
             didLogReady = false
+            miruroStallFallbackWorkItem?.cancel()
+            miruroStallFallbackWorkItem = nil
+            audioOnlyFallbackWorkItem?.cancel()
+            audioOnlyFallbackWorkItem = nil
             observePlaybackFailure()
             observePlaybackDebug()
 #if os(iOS)
@@ -279,6 +284,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
                 self.miruroStallFallbackWorkItem?.cancel()
                 self.miruroStallFallbackWorkItem = nil
                 self.miruroStallAnchorSeconds = nil
+                self.scheduleAudioOnlyFallbackCheckIfNeeded()
             case .paused:
                 // Keep any pending check alive; if it is user pause, the check self-cancels by progress movement/state.
                 break
@@ -386,6 +392,42 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate, UIAd
         }
         miruroStallFallbackWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds, execute: work)
+    }
+
+    /// If playback reaches "playing" but AVPlayer has no video frame (audio-only HEVC, etc.), try the next server.
+    private func scheduleAudioOnlyFallbackCheckIfNeeded() {
+        guard miruroTryNextServerOnFailure || miruroLastServerAttempt else { return }
+        guard miruroFallbackTriggered == false else { return }
+        audioOnlyFallbackWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let player = self.player, let item = player.currentItem else { return }
+            guard player.timeControlStatus == .playing else { return }
+            let size = item.presentationSize
+            guard size.width < 2 || size.height < 2 else { return }
+            guard self.miruroTryNextServerOnFailure || self.miruroLastServerAttempt else { return }
+            if self.miruroTryNextServerOnFailure {
+                self.miruroTryNextServerOnFailure = false
+                self.miruroFallbackTriggered = true
+                Logger.shared.log("Playback is audio-only (no video frame), trying next server", type: "Stream")
+                self.dismiss(animated: true) {
+                    NotificationCenter.default.post(name: .noirMiruroTryNextServer, object: nil)
+                }
+            } else {
+                self.miruroLastServerAttempt = false
+                Logger.shared.log("Playback is audio-only on last server", type: "Stream")
+                let alert = UIAlertController(
+                    title: "Playback Error",
+                    message: "All video servers failed for this source.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "Close", style: .default) { [weak self] _ in
+                    self?.dismiss(animated: true)
+                })
+                self.present(alert, animated: true)
+            }
+        }
+        audioOnlyFallbackWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0, execute: work)
     }
 
     private func showPlaybackErrorAlert(error: Error?) {

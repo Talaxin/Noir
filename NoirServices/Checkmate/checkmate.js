@@ -508,25 +508,11 @@ async function extractStreamUrl(ID) {
             return 0;
         };
 
-        // AVPlayer handles HLS (H.264) well; VidLink MP4s are often HEVC and show audio-only in Normal player.
-        const getFormatWeight = (streamUrl) => {
-            const u = String(streamUrl || "").toLowerCase();
-            if (u.includes(".m3u8")) return 3000;
-            if (u.includes("/h264/") || u.includes("/avc/") || u.includes("avc1")) return 1000;
-            if (u.includes("/h265/") || u.includes("hevc") || u.includes("hvc1")) return -2000;
-            return 0;
-        };
-
         allStreams.sort((a, b) => {
             const qualA = getQualityWeight(a.title);
             const qualB = getQualityWeight(b.title);
             if (qualA !== qualB) {
                 return qualB - qualA;
-            }
-            const fmtA = getFormatWeight(a.streamUrl);
-            const fmtB = getFormatWeight(b.streamUrl);
-            if (fmtA !== fmtB) {
-                return fmtB - fmtA;
             }
             const prioA = SOURCE_PRIORITY[a.sourceMapped] || 0;
             const prioB = SOURCE_PRIORITY[b.sourceMapped] || 0;

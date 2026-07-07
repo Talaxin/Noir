@@ -17,20 +17,20 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.36",
-      "versionDate": "2026-07-06T17:02:58-07:00",
-      "versionDescription": "Fix Checkmate HLS in Normal player: proxy nested m3u8 correctly, always proxy Referer streams, longer startup timeout.",
+      "version": "1.0.37",
+      "versionDate": "2026-07-06T17:12:23-07:00",
+      "versionDescription": "Checkmate: pick best quality server first, auto-fallback if stream fails or is audio-only.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.36",
-          "date": "2026-07-06T17:02:58-07:00",
-          "localizedDescription": "Fix Checkmate HLS in Normal player: proxy nested m3u8 correctly, always proxy Referer streams, longer startup timeout.",
+          "version": "1.0.37",
+          "date": "2026-07-06T17:12:23-07:00",
+          "localizedDescription": "Checkmate: pick best quality server first, auto-fallback if stream fails or is audio-only.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24468702,
+          "size": 24470441,
           "minOSVersion": "15.0"
         }
       ]
