@@ -68,13 +68,27 @@ final class ModulesSearchResultsViewModel: ObservableObject {
     /// Checkmate: start playback on first provider result while others keep polling.
     var checkmatePlaybackStarted = false
     var checkmateActiveStreamURL: String?
+    var checkmateLatestStreams: [StreamOption] = []
+    var checkmateFastStartTask: Task<Void, Never>?
+    
+    func cancelCheckmateFastStartTask() {
+        checkmateFastStartTask?.cancel()
+        checkmateFastStartTask = nil
+    }
     
     func clearMiruroFallbackContext() {
+        cancelCheckmateFastStartTask()
         miruroFallbackQueue = []
         miruroFallbackService = nil
         miruroFallbackExternalSubs = []
         checkmatePlaybackStarted = false
         checkmateActiveStreamURL = nil
+        checkmateLatestStreams = []
+    }
+    
+    func clearCheckmateContextIfIdle() {
+        guard !checkmatePlaybackStarted else { return }
+        clearMiruroFallbackContext()
     }
     
     init() {
@@ -751,6 +765,9 @@ struct ModulesSearchResultsSheet: View {
         }
         guard let svc = viewModel.miruroFallbackService else { return }
         let next = viewModel.miruroFallbackQueue.removeFirst()
+        if isCheckmateService(svc) {
+            viewModel.checkmateActiveStreamURL = next.url
+        }
         Logger.shared.log("\(svc.metadata.sourceName): server failed, trying next (\(next.name))", type: "Stream")
         playStreamURL(next.url, service: svc, subtitle: nil, headers: next.headers, externalSubtitleTracks: viewModel.miruroFallbackExternalSubs)
     }
@@ -912,7 +929,7 @@ struct ModulesSearchResultsSheet: View {
         if service.metadata.sourceName == "Miruro" {
             viewModel.clearMiruroFallbackContext()
         } else if isCheckmateService(service) {
-            viewModel.clearMiruroFallbackContext()
+            viewModel.clearCheckmateContextIfIdle()
         }
         let softsub = service.metadata.softsub ?? false
         fetchStreamsWithOptionalProgress(
@@ -1094,7 +1111,7 @@ struct ModulesSearchResultsSheet: View {
         if service.metadata.sourceName == "Miruro" {
             viewModel.clearMiruroFallbackContext()
         } else if isCheckmateService(service) {
-            viewModel.clearMiruroFallbackContext()
+            viewModel.clearCheckmateContextIfIdle()
         }
         let softsub = service.metadata.softsub ?? false
         fetchStreamsWithOptionalProgress(
@@ -1139,29 +1156,46 @@ struct ModulesSearchResultsSheet: View {
     }
 
     @MainActor
-    private func preferredCheckmateStream(from streams: [StreamOption]) -> StreamOption {
-        guard !streams.isEmpty else { fatalError("preferredCheckmateStream requires non-empty streams") }
-        if let hls = streams.first(where: { $0.url.localizedCaseInsensitiveContains(".m3u8") }) {
-            return hls
-        }
-        return streams[0]
+    private func isLikelyBrokenCheckmateMP4(_ url: String) -> Bool {
+        let u = url.lowercased()
+        return u.contains("hakunaymatata") || u.contains("bcdn.")
     }
 
     @MainActor
-    private func handleCheckmateStreamProgress(streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?, service: Service) {
-        let availableStreams = parseStreamOptions(streams: streams, sources: sources)
-        guard !availableStreams.isEmpty else { return }
+    private func preferredCheckmateStream(from streams: [StreamOption]) -> StreamOption {
+        guard !streams.isEmpty else { fatalError("preferredCheckmateStream requires non-empty streams") }
 
-        if viewModel.checkmatePlaybackStarted {
-            updateCheckmateFallbackQueue(availableStreams: availableStreams)
-            viewModel.streamFetchProgress = "Found \(availableStreams.count) server(s); still polling..."
-            return
+        let withoutBrokenMP4 = streams.filter { stream in
+            isLikelyHLSStreamURL(stream.url) || !isLikelyBrokenCheckmateMP4(stream.url)
+        }
+        let pool = withoutBrokenMP4.isEmpty ? streams : withoutBrokenMP4
+
+        if let hls = pool.first(where: { isLikelyHLSStreamURL($0.url) }) {
+            return hls
         }
 
+        let withoutEpsilon = pool.filter { !$0.name.localizedCaseInsensitiveContains("Epsilon") }
+        let ranked = withoutEpsilon.isEmpty ? pool : withoutEpsilon
+
+        for tag in ["Gamma", "Alpha", "Delta", "Beta"] {
+            if let match = ranked.first(where: { $0.name.localizedCaseInsensitiveContains(tag) }) {
+                return match
+            }
+        }
+        return ranked[0]
+    }
+
+    @MainActor
+    private func beginCheckmatePlayback(
+        best: StreamOption,
+        availableStreams: [StreamOption],
+        subtitles: [String]?,
+        service: Service
+    ) {
+        viewModel.cancelCheckmateFastStartTask()
         viewModel.checkmatePlaybackStarted = true
         viewModel.miruroFallbackService = service
         viewModel.isFetchingStreams = false
-        let best = preferredCheckmateStream(from: availableStreams)
         viewModel.checkmateActiveStreamURL = best.url
         updateCheckmateFallbackQueue(availableStreams: availableStreams)
         Logger.shared.log("Checkmate: fast-start on \(best.name); polling \(viewModel.miruroFallbackQueue.count) more fallback(s)", type: "Stream")
@@ -1173,6 +1207,56 @@ struct ModulesSearchResultsSheet: View {
             streamURL: best.url,
             headers: best.headers
         )
+    }
+
+    @MainActor
+    private func scheduleCheckmateFastStartIfNeeded(
+        availableStreams: [StreamOption],
+        subtitles: [String]?,
+        service: Service
+    ) {
+        viewModel.checkmateLatestStreams = availableStreams
+        let best = preferredCheckmateStream(from: availableStreams)
+
+        if isLikelyHLSStreamURL(best.url) {
+            beginCheckmatePlayback(best: best, availableStreams: availableStreams, subtitles: subtitles, service: service)
+            return
+        }
+
+        guard viewModel.checkmateFastStartTask == nil else { return }
+
+        Logger.shared.log("Checkmate: waiting up to 5s for HLS before starting \(best.name)", type: "Stream")
+        viewModel.streamFetchProgress = "Finding best server…"
+
+        viewModel.checkmateFastStartTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled, !viewModel.checkmatePlaybackStarted else { return }
+            let latest = viewModel.checkmateLatestStreams
+            guard !latest.isEmpty else { return }
+            let pick = preferredCheckmateStream(from: latest)
+            beginCheckmatePlayback(best: pick, availableStreams: latest, subtitles: subtitles, service: service)
+        }
+    }
+
+    @MainActor
+    private func handleCheckmateStreamProgress(streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?, service: Service) {
+        let availableStreams = parseStreamOptions(streams: streams, sources: sources)
+        guard !availableStreams.isEmpty else { return }
+
+        viewModel.checkmateLatestStreams = availableStreams
+
+        if viewModel.checkmatePlaybackStarted {
+            updateCheckmateFallbackQueue(availableStreams: availableStreams)
+            viewModel.streamFetchProgress = "Found \(availableStreams.count) server(s); still polling..."
+            return
+        }
+
+        let best = preferredCheckmateStream(from: availableStreams)
+        if isLikelyHLSStreamURL(best.url) {
+            beginCheckmatePlayback(best: best, availableStreams: availableStreams, subtitles: subtitles, service: service)
+        } else {
+            scheduleCheckmateFastStartIfNeeded(availableStreams: availableStreams, subtitles: subtitles, service: service)
+        }
     }
 
     @MainActor

@@ -10,8 +10,7 @@ const SOURCES = [
     { name: "VidEasy", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/videasy/videasy.js" },
     { name: "VidLink", url: NOIR_PROVIDER_BASE + "/vidlink.js" },
     { name: "VidFast", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidfast/vidfast.js" },
-    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" },
-    { name: "VidCore", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidcore/vidcore.js" }
+    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" }
 ];
 
 const SOURCE_NAMES = {
@@ -269,18 +268,34 @@ async function searchResults(query) {
         }
 
         if (dataResults.length > 0) {
+            const formatTitle = function(result, isMovieRow) {
+                var base = isMovieRow
+                    ? (result.title || result.name || result.original_title || result.original_name || "Untitled")
+                    : (result.name || result.title || result.original_name || result.original_title || "Untitled");
+                var year = "";
+                if (isMovieRow && result.release_date) {
+                    year = String(result.release_date).substring(0, 4);
+                } else if (!isMovieRow && result.first_air_date) {
+                    year = String(result.first_air_date).substring(0, 4);
+                }
+                if (year && year.length === 4 && base.indexOf("(" + year + ")") < 0) {
+                    base += " (" + year + ")";
+                }
+                return base;
+            };
+
             transformedResults = transformedResults.concat(
                 dataResults
                     .map(result => {
                         if (result.media_type === "movie" || result.title) {
                             return {
-                                title: result.title || result.name || result.original_title || result.original_name || "Untitled",
+                                title: formatTitle(result, true),
                                 image: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : "",
                                 href: HREF_BASE + "movie/" + result.id,
                             };
                         } else if (result.media_type === "tv" || result.name) {
                             return {
-                                title: result.name || result.title || result.original_name || result.original_title || "Untitled",
+                                title: formatTitle(result, false),
                                 image: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : "",
                                 href: HREF_BASE + "tv/" + result.id + "/1/1",
                             };
