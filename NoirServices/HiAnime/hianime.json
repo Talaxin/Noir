@@ -1,0 +1,19 @@
+{
+  "sourceName": "HiAnime (Consumet)",
+  "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain_url=hianime.to",
+  "author": {
+    "name": "Consumet",
+    "icon": "https://docs.consumet.org/favicon.ico"
+  },
+  "version": "1.0.0",
+  "language": "English",
+  "streamType": "HLS",
+  "quality": "Various",
+  "baseUrl": "https://mac2.tail58f58f.ts.net/consumet",
+  "searchBaseUrl": "https://mac2.tail58f58f.ts.net/consumet/anime/hianime",
+  "scriptUrl": "https://raw.githubusercontent.com/Talaxin/Noir/main/NoirServices/HiAnime/hianime.js",
+  "type": "anime",
+  "asyncJS": true,
+  "softsub": false,
+  "downloadSupport": true
+}
