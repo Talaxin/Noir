@@ -47,13 +47,17 @@ extension JSContext {
         let ctx = self
 
         let registerBlock: @convention(block) (String, String, JSValue, JSValue) -> Void = { name, code, resolve, reject in
+            // Match upstream Checkmate/Sora async submodule wrapper.
             let wrapped = """
             (function(soraFetch, fetchv2, fetch) {
+                return (async function() {
             \(code)
-            return { extractStreamUrl: extractStreamUrl };
+                    return { extractStreamUrl: extractStreamUrl };
+                })();
             })(soraFetch, fetchv2, fetch);
             """
-            guard let result = ctx.evaluateScript(wrapped) else {
+
+            guard let evaluated = ctx.evaluateScript(wrapped) else {
                 let message = ctx.exception?.toString() ?? "Submodule eval failed"
                 Logger.shared.log("noirRegisterModule(\(name)): \(message)", type: "Error")
                 reject.call(withArguments: [message])
@@ -62,13 +66,31 @@ extension JSContext {
             if let exception = ctx.exception {
                 Logger.shared.log("noirRegisterModule(\(name)) exception: \(exception)", type: "Error")
             }
-            guard let fn = result.objectForKeyedSubscript("extractStreamUrl"), !fn.isUndefined else {
-                Logger.shared.log("noirRegisterModule(\(name)): missing extractStreamUrl", type: "Error")
-                reject.call(withArguments: ["missing extractStreamUrl"])
+
+            let storeAndResolve: (JSValue) -> Void = { result in
+                guard let fn = result.objectForKeyedSubscript("extractStreamUrl"), !fn.isUndefined else {
+                    Logger.shared.log("noirRegisterModule(\(name)): missing extractStreamUrl", type: "Error")
+                    reject.call(withArguments: ["missing extractStreamUrl"])
+                    return
+                }
+                registry.store(extractor: fn, name: name, in: ctx)
+                resolve.call(withArguments: [true])
+            }
+
+            let rejectWithError: (JSValue) -> Void = { error in
+                let message = error.toString() ?? "Submodule eval failed"
+                Logger.shared.log("noirRegisterModule(\(name)): \(message)", type: "Error")
+                reject.call(withArguments: [message])
+            }
+
+            if let resultString = evaluated.toString(), resultString == "[object Promise]" {
+                let thenBlock = JSValue(object: storeAndResolve, in: ctx)
+                let catchBlock = JSValue(object: rejectWithError, in: ctx)
+                evaluated.invokeMethod("then", withArguments: [thenBlock as Any, catchBlock as Any])
                 return
             }
-            registry.store(extractor: fn, name: name, in: ctx)
-            resolve.call(withArguments: [true])
+
+            storeAndResolve(evaluated)
         }
 
         let extractBlock: @convention(block) (String, String, JSValue, JSValue) -> Void = { name, episodeID, resolve, reject in

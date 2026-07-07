@@ -17,20 +17,28 @@
       "developerName": "Talaxin",
       "subtitle": "Modular media player",
       "localizedDescription": "Noir modular media player with external services.",
-      "version": "1.0.39",
-      "versionDate": "2026-07-06T18:53:55-07:00",
-      "versionDescription": "Fix Checkmate: inject setTimeout/clearTimeout into JavaScriptCore runtime.",
+      "version": "1.0.40",
+      "versionDate": "2026-07-06T19:45:00-07:00",
+      "versionDescription": "Checkmate audit: upstream provider order, new Function sub-modules, HLS-first fast-start, setTimeout bridge.",
       "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
       "iconURL": "https://raw.githubusercontent.com/Talaxin/Noir/main/noir.png",
       "tintColor": "#1a1a1a",
       "category": "entertainment",
       "versions": [
         {
+          "version": "1.0.40",
+          "date": "2026-07-06T19:45:00-07:00",
+          "localizedDescription": "Checkmate audit: upstream provider order, new Function sub-modules, HLS-first fast-start, setTimeout bridge.",
+          "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
+          "size": 24480698,
+          "minOSVersion": "15.0"
+        },
+        {
           "version": "1.0.39",
           "date": "2026-07-06T18:53:55-07:00",
           "localizedDescription": "Fix Checkmate: inject setTimeout/clearTimeout into JavaScriptCore runtime.",
           "downloadURL": "https://github.com/Talaxin/Noir/raw/main/build/Noir.ipa",
-          "size": 24477580,
+          "size": 24480698,
           "minOSVersion": "15.0"
         }
       ]

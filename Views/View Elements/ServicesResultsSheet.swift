@@ -1139,6 +1139,15 @@ struct ModulesSearchResultsSheet: View {
     }
 
     @MainActor
+    private func preferredCheckmateStream(from streams: [StreamOption]) -> StreamOption {
+        guard !streams.isEmpty else { fatalError("preferredCheckmateStream requires non-empty streams") }
+        if let hls = streams.first(where: { $0.url.localizedCaseInsensitiveContains(".m3u8") }) {
+            return hls
+        }
+        return streams[0]
+    }
+
+    @MainActor
     private func handleCheckmateStreamProgress(streams: [String]?, subtitles: [String]?, sources: [[String: Any]]?, service: Service) {
         let availableStreams = parseStreamOptions(streams: streams, sources: sources)
         guard !availableStreams.isEmpty else { return }
@@ -1152,7 +1161,7 @@ struct ModulesSearchResultsSheet: View {
         viewModel.checkmatePlaybackStarted = true
         viewModel.miruroFallbackService = service
         viewModel.isFetchingStreams = false
-        let best = availableStreams[0]
+        let best = preferredCheckmateStream(from: availableStreams)
         viewModel.checkmateActiveStreamURL = best.url
         updateCheckmateFallbackQueue(availableStreams: availableStreams)
         Logger.shared.log("Checkmate: fast-start on \(best.name); polling \(viewModel.miruroFallbackQueue.count) more fallback(s)", type: "Stream")
@@ -1184,11 +1193,12 @@ struct ModulesSearchResultsSheet: View {
 
     @MainActor
     private func updateCheckmateFallbackQueue(availableStreams: [StreamOption]) {
-        guard let active = viewModel.checkmateActiveStreamURL else {
-            viewModel.miruroFallbackQueue = Array(availableStreams.dropFirst())
+        if let active = viewModel.checkmateActiveStreamURL {
+            viewModel.miruroFallbackQueue = availableStreams.filter { $0.url != active }
             return
         }
-        viewModel.miruroFallbackQueue = availableStreams.filter { $0.url != active }
+        let best = preferredCheckmateStream(from: availableStreams)
+        viewModel.miruroFallbackQueue = availableStreams.filter { $0.url != best.url }
     }
     
     @MainActor
@@ -1200,9 +1210,11 @@ struct ModulesSearchResultsSheet: View {
 
         // Miruro / Checkmate: use best server first; on playback failure try next automatically.
         if isAggregatorWithStreamFallback(service), availableStreams.count > 1 {
+            let best = isCheckmateService(service)
+                ? preferredCheckmateStream(from: availableStreams)
+                : availableStreams[0]
             if downloadIntent {
                 viewModel.isFetchingStreams = false
-                let best = availableStreams[0]
                 Logger.shared.log("\(service.metadata.sourceName) download: using best of \(availableStreams.count) servers (\(best.name))", type: "Stream")
                 resolveSubtitleSelection(
                     subtitles: subtitles,
@@ -1213,10 +1225,9 @@ struct ModulesSearchResultsSheet: View {
                 )
                 return
             }
-            viewModel.miruroFallbackQueue = Array(availableStreams.dropFirst())
+            viewModel.miruroFallbackQueue = availableStreams.filter { $0.url != best.url }
             viewModel.miruroFallbackService = service
             viewModel.isFetchingStreams = false
-            let best = availableStreams[0]
             Logger.shared.log("\(service.metadata.sourceName): playing best server first (\(best.name)); \(viewModel.miruroFallbackQueue.count) fallback(s) if needed", type: "Stream")
             resolveSubtitleSelection(
                 subtitles: subtitles,

@@ -7,10 +7,11 @@ const NOIR_PROVIDER_BASE = "https://raw.githubusercontent.com/Talaxin/Noir/main/
 const scriptCache = {};
 
 const SOURCES = [
-    { name: "VidLink", url: NOIR_PROVIDER_BASE + "/vidlink.js" },
     { name: "VidEasy", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/videasy/videasy.js" },
+    { name: "VidLink", url: NOIR_PROVIDER_BASE + "/vidlink.js" },
     { name: "VidFast", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidfast/vidfast.js" },
-    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" }
+    { name: "Hexa", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/hexa/hexa.js" },
+    { name: "VidCore", url: "https://git.luna-app.eu/50n50/sources/raw/branch/main/vidcore/vidcore.js" }
 ];
 
 const SOURCE_NAMES = {
@@ -61,17 +62,40 @@ async function getModule(name, url) {
         const response = await soraFetch(url);
         if (!response) throw new Error("Failed to fetch script");
         const code = await response.text();
-        await new Promise(function(resolve, reject) {
-            noirRegisterModule(name, code, resolve, reject);
-        });
-        scriptCache[name] = {
-            extractStreamUrl: function(id) {
-                return new Promise(function(resolve, reject) {
-                    noirModuleExtract(name, id, resolve, reject);
-                });
+
+        // Upstream Sora/Luna pattern (new Function + injected fetch helpers).
+        try {
+            const wrappedCode = `
+                const soraFetch = arguments[0];
+                const fetchv2 = arguments[1];
+                const fetch = arguments[2];
+                return (async function() {
+                    ${code}
+                    return { extractStreamUrl };
+                })();
+            `;
+            const fn = new Function(wrappedCode);
+            const exports = await fn(soraFetch, fetchv2, fetch);
+            if (exports && typeof exports.extractStreamUrl === "function") {
+                scriptCache[name] = exports;
+                return exports;
             }
-        };
-        return scriptCache[name];
+            throw new Error("missing extractStreamUrl export");
+        } catch (fnErr) {
+            console.log("getModule new Function failed for " + name + ": " + fnErr.message);
+            if (typeof noirRegisterModule !== "function") throw fnErr;
+            await new Promise(function(resolve, reject) {
+                noirRegisterModule(name, code, resolve, reject);
+            });
+            scriptCache[name] = {
+                extractStreamUrl: function(id) {
+                    return new Promise(function(resolve, reject) {
+                        noirModuleExtract(name, id, resolve, reject);
+                    });
+                }
+            };
+            return scriptCache[name];
+        }
     } catch (e) {
         console.log("Failed to load module " + name + " from " + url + ": " + e.message);
         return null;
@@ -479,6 +503,13 @@ function streamsFromProviderResult(source, data) {
     return out;
 }
 
+function streamFormatWeight(streamUrl) {
+    const u = String(streamUrl || "").toLowerCase();
+    if (u.indexOf(".m3u8") >= 0) return 3;
+    if (u.indexOf(".mp4") >= 0) return 2;
+    return 1;
+}
+
 function dedupeAndSortStreams(allStreams) {
     const seenUrls = new Set();
     let streams = allStreams.filter(function(stream) {
@@ -503,6 +534,9 @@ function dedupeAndSortStreams(allStreams) {
         const qualA = getQualityWeight(a.title);
         const qualB = getQualityWeight(b.title);
         if (qualA !== qualB) return qualB - qualA;
+        const fmtA = streamFormatWeight(a.streamUrl);
+        const fmtB = streamFormatWeight(b.streamUrl);
+        if (fmtA !== fmtB) return fmtB - fmtA;
         const prioA = SOURCE_PRIORITY[a.sourceMapped] || 0;
         const prioB = SOURCE_PRIORITY[b.sourceMapped] || 0;
         return prioB - prioA;
