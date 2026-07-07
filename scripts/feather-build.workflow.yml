@@ -1,0 +1,102 @@
+name: Build IPA for Feather
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Release notes shown in Feather"
+        required: false
+        default: "GitHub Actions build."
+  push:
+    branches:
+      - full-project
+      - main
+    paths-ignore:
+      - "build/Noir.ipa"
+      - "repo.json"
+      - ".github/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feather-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    name: Build iOS IPA and publish to main
+    runs-on: macos-15
+    steps:
+      - name: Checkout full project source
+        uses: actions/checkout@v4
+        with:
+          ref: full-project
+          fetch-depth: 0
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project Noir.xcodeproj -scheme Noir
+
+      - name: Build iOS IPA
+        run: |
+          chmod +x ./ipabuild.sh
+          ./ipabuild.sh ios
+
+      - name: Update Feather repo.json
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || format('GitHub Actions build ({0}).', github.sha) }}
+        run: |
+          python3 release_esign.py \
+            --align-ipa-version \
+            --description "$RELEASE_NOTES"
+
+      - name: Publish IPA to main (Feather source branch)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          IPA_PATH="$GITHUB_WORKSPACE/build/Noir.ipa"
+          REPO_JSON_PATH="$GITHUB_WORKSPACE/repo.json"
+
+          publish_branch() {
+            local branch="$1"
+            git fetch origin "$branch"
+            git checkout "$branch"
+            mkdir -p build
+            cp "$IPA_PATH" build/Noir.ipa
+            cp "$REPO_JSON_PATH" repo.json
+            git add -f build/Noir.ipa repo.json
+            if git diff --staged --quiet; then
+              echo "No release changes for $branch"
+              return 0
+            fi
+            git commit -m "CI: publish Noir.ipa for Feather [skip ci]"
+            git push origin "$branch"
+          }
+
+          publish_branch main
+
+          if [ "${{ github.ref_name }}" = "full-project" ]; then
+            git fetch origin full-project
+            git checkout full-project
+            mkdir -p build
+            cp "$IPA_PATH" build/Noir.ipa
+            cp "$REPO_JSON_PATH" repo.json
+            git add -f build/Noir.ipa repo.json
+            if ! git diff --staged --quiet; then
+              git commit -m "CI: publish Noir.ipa for Feather [skip ci]"
+              git push origin full-project
+            fi
+          fi
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Noir-iOS
+          path: build/Noir.ipa
+          if-no-files-found: error

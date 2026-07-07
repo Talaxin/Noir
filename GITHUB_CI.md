@@ -10,9 +10,11 @@ GitHub blocks uploading workflow files from some git tokens. Enable CI **once** 
 2. Click **“I understand my repositories, go ahead and enable them”** if prompted
 3. Click **“New workflow”** → **“set up a workflow yourself”**
 4. Name the file: `.github/workflows/build.yml`
-5. Replace the editor contents with the file from this repo:  
-   `.github/workflows/build.yml` (on your Mac / `full-project` branch)
+5. Copy the template from this repo (safe to push via git):  
+   **`scripts/feather-build.workflow.yml`**
 6. Commit directly to the **`full-project`** branch
+
+**Do not commit `.github/workflows/build.yml` via Cursor/cloud git pushes** — GitHub rejects it without the `workflow` OAuth scope. Use the GitHub website for that one file only.
 
 After that, every push to `full-project` builds the IPA and updates `main` for Feather.
 
