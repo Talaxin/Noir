@@ -61,43 +61,46 @@ jobs:
           cp build/Noir.ipa /tmp/noir-ci-release/Noir.ipa
           cp repo.json /tmp/noir-ci-release/repo.json
 
+      - name: Checkout main for Feather release
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: release-main
+          fetch-depth: 0
+
+      - name: Checkout full-project for artifact sync
+        if: github.ref_name == 'full-project'
+        uses: actions/checkout@v4
+        with:
+          ref: full-project
+          path: release-full-project
+          fetch-depth: 0
+
       - name: Publish IPA to main (Feather source branch)
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          IPA_PATH="/tmp/noir-ci-release/Noir.ipa"
-          REPO_JSON_PATH="/tmp/noir-ci-release/repo.json"
-
-          publish_branch() {
-            local branch="$1"
-            git fetch origin "$branch"
-            git checkout "$branch"
-            mkdir -p build
-            cp -f "$IPA_PATH" build/Noir.ipa
-            cp -f "$REPO_JSON_PATH" repo.json
+          publish_in_dir() {
+            local dir="$1"
+            local branch="$2"
+            mkdir -p "$dir/build"
+            cp /tmp/noir-ci-release/Noir.ipa "$dir/build/Noir.ipa"
+            cp /tmp/noir-ci-release/repo.json "$dir/repo.json"
+            cd "$dir"
             git add -f build/Noir.ipa repo.json
             if git diff --staged --quiet; then
               echo "No release changes for $branch"
               return 0
             fi
             git commit -m "CI: publish Noir.ipa for Feather [skip ci]"
-            git push origin "$branch"
+            git push origin HEAD:"$branch"
           }
 
-          publish_branch main
+          publish_in_dir "$GITHUB_WORKSPACE/release-main" main
 
           if [ "${{ github.ref_name }}" = "full-project" ]; then
-            git fetch origin full-project
-            git checkout full-project
-            mkdir -p build
-            cp -f "$IPA_PATH" build/Noir.ipa
-            cp -f "$REPO_JSON_PATH" repo.json
-            git add -f build/Noir.ipa repo.json
-            if ! git diff --staged --quiet; then
-              git commit -m "CI: publish Noir.ipa for Feather [skip ci]"
-              git push origin full-project
-            fi
+            publish_in_dir "$GITHUB_WORKSPACE/release-full-project" full-project
           fi
 
       - name: Upload IPA artifact
