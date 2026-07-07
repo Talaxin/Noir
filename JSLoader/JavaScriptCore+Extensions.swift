@@ -470,9 +470,76 @@ extension JSContext {
         evaluateScript(definition)
     }
 
+    private static var timerRegistries: [ObjectIdentifier: JSTimerRegistry] = [:]
+    private static let timerRegistryLock = NSLock()
+
+    private final class JSTimerRegistry {
+        private var nextID = 1
+        private var items: [Int: DispatchWorkItem] = [:]
+        private let lock = NSLock()
+
+        func schedule(delayMs: Double, fire: @escaping () -> Void) -> Int {
+            lock.lock()
+            let id = nextID
+            nextID += 1
+            lock.unlock()
+
+            let work = DispatchWorkItem { [weak self] in
+                fire()
+                self?.remove(id)
+            }
+            lock.lock()
+            items[id] = work
+            lock.unlock()
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delayMs) / 1000.0, execute: work)
+            return id
+        }
+
+        func cancel(_ id: Int) {
+            lock.lock()
+            items[id]?.cancel()
+            items.removeValue(forKey: id)
+            lock.unlock()
+        }
+
+        private func remove(_ id: Int) {
+            lock.lock()
+            items.removeValue(forKey: id)
+            lock.unlock()
+        }
+    }
+
+    func setupTimers() {
+        let contextKey = ObjectIdentifier(self)
+        Self.timerRegistryLock.lock()
+        Self.timerRegistries[contextKey] = JSTimerRegistry()
+        Self.timerRegistryLock.unlock()
+
+        let setTimeout: @convention(block) (JSValue, Double) -> Int = { callback, delay in
+            Self.timerRegistryLock.lock()
+            let registry = Self.timerRegistries[contextKey]
+            Self.timerRegistryLock.unlock()
+            guard let registry else { return 0 }
+            return registry.schedule(delayMs: delay) {
+                callback.call(withArguments: [])
+            }
+        }
+
+        let clearTimeout: @convention(block) (Int) -> Void = { timerID in
+            Self.timerRegistryLock.lock()
+            let registry = Self.timerRegistries[contextKey]
+            Self.timerRegistryLock.unlock()
+            registry?.cancel(timerID)
+        }
+
+        setObject(setTimeout, forKeyedSubscript: "setTimeout" as NSString)
+        setObject(clearTimeout, forKeyedSubscript: "clearTimeout" as NSString)
+    }
+
     func setupJavaScriptEnvironment() {
         setupWeirdCode()
         setupConsoleLogging()
+        setupTimers()
         setupNativeFetch()
         setupNetworkFetch()
         setupNetworkFetchSimple()
