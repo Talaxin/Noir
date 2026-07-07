@@ -123,6 +123,14 @@ def main() -> int:
         action="store_true",
         help="Print what would change without writing files.",
     )
+    parser.add_argument(
+        "--align-ipa-version",
+        action="store_true",
+        help=(
+            "If the IPA CFBundleShortVersionString differs from repo.json, "
+            "prepend a new versions[] entry and set app.version to match the IPA."
+        ),
+    )
     args = parser.parse_args()
 
     repo_json_path = Path(args.repo_json).resolve()
@@ -170,6 +178,26 @@ def main() -> int:
                 f"CFBundleShortVersionString={ipa_short_version} but expected {after_app_version}. "
                 "Bump MARKETING_VERSION in Xcode project, rebuild IPA, then rerun release_esign.py."
             )
+    elif args.align_ipa_version:
+        if ipa_short_version is None:
+            raise ValueError("Could not read CFBundleShortVersionString from IPA.")
+        if ipa_short_version != before_app_version:
+            download_url = latest.get("downloadURL") or app.get("downloadURL")
+            min_os = latest.get("minOSVersion", "15.0")
+            new_entry = {
+                "version": ipa_short_version,
+                "date": now_iso,
+                "localizedDescription": args.description,
+                "downloadURL": download_url,
+                "size": ipa_size,
+                "minOSVersion": min_os,
+            }
+            versions.insert(0, new_entry)
+            app["version"] = ipa_short_version
+            after_app_version = ipa_short_version
+            latest = versions[0]
+        elif ipa_short_version != str(latest.get("version", before_app_version)):
+            latest["version"] = ipa_short_version
 
     app["versionDate"] = now_iso
     app["versionDescription"] = args.description
